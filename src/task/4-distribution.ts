@@ -1,0 +1,119 @@
+/**
+ * InfraScan Distribution Logic - DYNAMIC REWARD SYSTEM
+ * 
+ * REWARD STRUCTURE:
+ * - 3 tokens per approved node per round (DYNAMIC - scales with node count)
+ * - 24 rounds per day (1 hour per round)
+ * - 72 tokens per day per approved node (3 × 24 = 72)
+ * - Safety limit: Maximum 100 tokens per round (TESTING - supports up to 33 nodes)
+ * 
+ * PENALTY STRUCTURE:
+ * - Failed submissions receive 0 tokens (no stake slashing)
+ * - Only rewards are affected, stakes remain untouched
+ * 
+ * DYNAMIC SCALING EXAMPLES (TESTING MODE):
+ * - 1 node approved = 3 tokens distributed per round = 72 tokens/day
+ * - 5 nodes approved = 15 tokens distributed per round = 360 tokens/day
+ * - 10 nodes approved = 30 tokens distributed per round = 720 tokens/day
+ * - 33 nodes approved = 99 tokens distributed per round (maximum in testing)
+ * - 50 nodes approved = 99 tokens distributed (33 rewarded + 17 unrewarded)
+ * 
+ * NO MANUAL ADJUSTMENT NEEDED - System scales automatically!
+ */
+
+import { Submitter, DistributionList } from "@_koii/task-manager";
+
+// Token decimal places (9 is standard for SPL tokens)
+const TOKEN_DECIMALS = 9;
+
+// CORE REWARD PARAMETERS
+const TOKENS_PER_ROUND = 3; // 3 tokens per approved node per round
+const MAX_BOUNTY_PER_ROUND = 100; // 100 tokens maximum per round (TESTING - safety limit from config-task.yml)
+
+// CALCULATED LIMITS
+const MAX_NODES_PER_ROUND = Math.floor(MAX_BOUNTY_PER_ROUND / TOKENS_PER_ROUND); // 33 nodes max (testing)
+const TOKENS_PER_DAY_PER_NODE = TOKENS_PER_ROUND * 24; // 72 tokens per day per node (24 rounds/day)
+
+export const distribution = async (
+  submitters: Submitter[],
+  bounty: number,
+  roundNumber: number
+): Promise<DistributionList> => {
+  /**
+   * Generate the reward list for a given round
+   * Each approved node receives exactly 3 tokens per round
+   * Failed nodes receive 0 tokens (no stake slashing)
+   */
+  console.log(`MAKE DISTRIBUTION LIST FOR ROUND ${roundNumber}`);
+  console.log(`REWARD STRUCTURE: ${TOKENS_PER_ROUND} tokens per node per round`);
+  console.log(`DAILY EARNING POTENTIAL: ${TOKENS_PER_DAY_PER_NODE} tokens per node per day`);
+  console.log(`PENALTY POLICY: Failed submissions get 0 tokens (no stake slashing)`);
+  
+  const distributionList: DistributionList = {};
+  const approvedSubmitters = [];
+  const failedSubmitters = [];
+  
+  // Categorize submitters: approved get rewards, failed get zero (no slashing)
+  for (const submitter of submitters) {
+    if (submitter.votes > 0) {
+      // Positive votes = approved submission (gets 3 tokens)
+      approvedSubmitters.push(submitter.publicKey);
+    } else {
+      // Zero or negative votes = failed submission (gets 0 tokens, no slashing)
+      failedSubmitters.push(submitter.publicKey);
+      distributionList[submitter.publicKey] = 0;
+    }
+  }
+  
+  console.log(`APPROVED NODES: ${approvedSubmitters.length}`);
+  console.log(`FAILED NODES: ${failedSubmitters.length} (receiving 0 tokens, no stake penalty)`);
+  console.log(`MAX NODES PER ROUND: ${MAX_NODES_PER_ROUND}`);
+  
+  if (approvedSubmitters.length === 0) {
+    console.log("NO NODES TO REWARD - All submissions failed audit");
+    return distributionList;
+  }
+  
+  // Safety check: ensure we don't exceed the maximum number of nodes per round
+  if (approvedSubmitters.length > MAX_NODES_PER_ROUND) {
+    console.warn(`WARNING: Too many approved nodes (${approvedSubmitters.length}) exceeds max nodes per round (${MAX_NODES_PER_ROUND})`);
+    console.warn(`Only the first ${MAX_NODES_PER_ROUND} nodes will be rewarded this round`);
+    
+    // Only reward the first MAX_NODES_PER_ROUND nodes
+    const rewardedNodes = approvedSubmitters.slice(0, MAX_NODES_PER_ROUND);
+    const unrewardedNodes = approvedSubmitters.slice(MAX_NODES_PER_ROUND);
+    
+    // Give exactly 3 tokens to each of the first MAX_NODES_PER_ROUND nodes
+    const rewardPerNode = TOKENS_PER_ROUND * Math.pow(10, TOKEN_DECIMALS); // 3 tokens = 3,000,000,000 base units
+    rewardedNodes.forEach((candidate) => {
+      distributionList[candidate] = rewardPerNode;
+    });
+    
+    // Give 0 tokens to the remaining nodes (they won't be penalized, just not rewarded)
+    unrewardedNodes.forEach((candidate) => {
+      distributionList[candidate] = 0;
+    });
+    
+    console.log(`REWARDED NODES: ${rewardedNodes.length} nodes with ${TOKENS_PER_ROUND} tokens each`);
+    console.log(`UNREWARDED NODES: ${unrewardedNodes.length} nodes (exceeded round limit)`);
+    console.log(`TOTAL TOKENS DISTRIBUTED THIS ROUND: ${rewardedNodes.length * TOKENS_PER_ROUND} tokens`);
+    console.log(`TOTAL TOKENS DISTRIBUTED PER DAY: ${rewardedNodes.length * TOKENS_PER_DAY_PER_NODE} tokens`);
+    
+  } else {
+    // Normal case: All approved nodes get exactly 3 tokens each
+    const rewardPerNode = TOKENS_PER_ROUND * Math.pow(10, TOKEN_DECIMALS); // 3 tokens
+    
+    approvedSubmitters.forEach((candidate) => {
+      distributionList[candidate] = rewardPerNode; // Each node gets exactly 3 tokens
+    });
+    
+    const totalTokensDistributedThisRound = approvedSubmitters.length * TOKENS_PER_ROUND;
+    // ☝️ THIS is the critical line - it's based on ACTUAL approved nodes, not a fixed 72,000
+    
+    console.log(`REWARD PER NODE: ${TOKENS_PER_ROUND} tokens (${rewardPerNode} base units)`);
+    console.log(`TOTAL TOKENS DISTRIBUTED THIS ROUND: ${totalTokensDistributedThisRound} tokens`);
+    console.log(`TOTAL TOKENS DISTRIBUTED PER DAY: ${approvedSubmitters.length * TOKENS_PER_DAY_PER_NODE} tokens`);
+  }
+  
+  return distributionList;
+}
