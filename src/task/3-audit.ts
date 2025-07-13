@@ -28,41 +28,76 @@ export async function audit(
   submission: string,
   roundNumber: number,
   submitterKey: string,
-): Promise<boolean | void> {
+): Promise<boolean> {
   /**
    * Audit a submission
    * This function should return true if the submission is correct, false otherwise
+   * CRITICAL: This function MUST always return a boolean, never undefined or throw
    */
   console.log(`AUDIT SUBMISSION FOR ROUND ${roundNumber} from ${submitterKey}`);
   
+  // Wrap everything in try-catch to ensure we ALWAYS return a boolean
   try {
+    // Validate input parameters
+    if (!submission || typeof submission !== 'string') {
+      console.log(`❌ Invalid submission parameter from ${submitterKey}: ${typeof submission}`);
+      return false;
+    }
+    
+    if (typeof roundNumber !== 'number' || roundNumber < 0) {
+      console.log(`❌ Invalid round number from ${submitterKey}: ${roundNumber}`);
+      return false;
+    }
+    
+    if (!submitterKey || typeof submitterKey !== 'string') {
+      console.log(`❌ Invalid submitter key: ${typeof submitterKey}`);
+      return false;
+    }
+    
     // Try to parse as JSON first (for structured data)
-    const submissionData = JSON.parse(submission);
-    
-    // Phase 1: Validate uptime data
-    if (isUptimeSubmission(submissionData)) {
-      return validateUptimeSubmission(submissionData, submitterKey);
+    try {
+      const submissionData = JSON.parse(submission);
+      
+      // Phase 1: Validate uptime data
+      if (isUptimeSubmission(submissionData)) {
+        const result = validateUptimeSubmission(submissionData, submitterKey);
+        console.log(`🔄 Main audit function returning: ${result} for ${submitterKey}`);
+        return result;
+      }
+      
+      // Future Phase: Validate hardware data
+      if (isHardwareSubmission(submissionData)) {
+        const result = validateHardwareSubmission(submissionData, submitterKey);
+        console.log(`🔄 Main audit function returning: ${result} for ${submitterKey}`);
+        return result;
+      }
+      
+      // If it's valid JSON but unknown structure, reject
+      console.log(`Unknown submission structure from ${submitterKey}:`, submissionData);
+      console.log(`🔄 Main audit function returning: false for ${submitterKey} (unknown structure)`);
+      return false;
+      
+    } catch (jsonError) {
+      // If JSON parsing fails, try fallback validations
+      console.log(`JSON parsing failed for ${submitterKey}, trying fallback validations`);
+      
+      // Fallback: Check for simple string submissions
+      if (typeof submission === 'string') {
+        const result = validateStringSubmission(submission, submitterKey);
+        console.log(`🔄 Main audit function returning: ${result} for ${submitterKey} (string validation)`);
+        return result;
+      }
+      
+      console.log(`Invalid submission format from ${submitterKey}`);
+      console.log(`🔄 Main audit function returning: false for ${submitterKey} (invalid format)`);
+      return false;
     }
-    
-    // Future Phase: Validate hardware data
-    if (isHardwareSubmission(submissionData)) {
-      return validateHardwareSubmission(submissionData, submitterKey);
-    }
-    
-    // If it's valid JSON but unknown structure, reject
-    console.log(`Unknown submission structure from ${submitterKey}:`, submissionData);
-    return false;
     
   } catch (error) {
-    // If JSON parsing fails, try fallback validations
-    console.log(`JSON parsing failed for ${submitterKey}, trying fallback validations`);
-    
-    // Fallback: Check for simple string submissions
-    if (typeof submission === 'string') {
-      return validateStringSubmission(submission, submitterKey);
-    }
-    
-    console.log(`Invalid submission format from ${submitterKey}`);
+    // CRITICAL: Catch ANY error and return false instead of undefined
+    console.error(`🚨 CRITICAL ERROR in audit function for ${submitterKey}:`, error);
+    console.error(`Stack trace:`, error instanceof Error ? error.stack : 'No stack trace available');
+    console.log(`🔄 Main audit function returning: false for ${submitterKey} (critical error caught)`);
     return false;
   }
 }
@@ -112,6 +147,7 @@ function validateUptimeSubmission(data: UptimeSubmissionData, submitterKey: stri
   // Check if uptime values are reasonable
   if (data.uptime < 0 || data.uptime > 31536000) { // Max 1 year in seconds
     console.log(`❌ Invalid uptime value from ${submitterKey}: ${data.uptime}`);
+    console.log(`🔄 Audit function returning: false for ${submitterKey} (invalid uptime)`);
     return false;
   }
   
@@ -137,6 +173,7 @@ function validateUptimeSubmission(data: UptimeSubmissionData, submitterKey: stri
   
   if (timeDiff > maxTimeDiff) {
     console.log(`❌ Timestamp out of range from ${submitterKey}: ${new Date(data.timestamp).toISOString()} (current: ${new Date(now).toISOString()}, diff: ${timeDiffHours.toFixed(2)} hours)`);
+    console.log(`🔄 Audit function returning: false for ${submitterKey} (timestamp out of range)`);
     return false;
   }
   
@@ -165,6 +202,7 @@ function validateUptimeSubmission(data: UptimeSubmissionData, submitterKey: stri
   }
   
   console.log(`✅ Valid uptime submission from ${submitterKey}`);
+  console.log(`🔄 Audit function returning: true for ${submitterKey}`);
   return true;
 }
 

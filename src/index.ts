@@ -5,6 +5,11 @@ import { submission } from "./task/2-submission";
 import { audit } from "./task/3-audit";
 import { distribution } from "./task/4-distribution";
 import { routes } from "./task/5-routes";
+import { getExpectedRewardPerNode, getExpectedRewardPerNodeInBaseUnits, getTaskRewardInfo } from "./task/reward";
+
+// Export reward functions for desktop node interface
+export { getExpectedRewardPerNode, getExpectedRewardPerNodeInBaseUnits, getTaskRewardInfo };
+
 initializeTaskManager({
   setup,
   task,

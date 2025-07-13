@@ -8,6 +8,29 @@ const TOKENS_PER_ROUND = 3; // 3 tokens per approved node per round
 // Configurable payout per round (in base units)
 export let PAYOUT_PER_ROUND = TOKENS_PER_ROUND * Math.pow(10, TOKEN_DECIMALS); // 3 tokens = 3,000,000,000 base units
 
+// Export functions for desktop node interface
+export function getExpectedRewardPerNode(): number {
+  return TOKENS_PER_ROUND; // Return 3 tokens per node
+}
+
+export function getExpectedRewardPerNodeInBaseUnits(): number {
+  return PAYOUT_PER_ROUND; // Return 3 tokens in base units
+}
+
+// Comprehensive task reward information for desktop node interface
+export function getTaskRewardInfo() {
+  return {
+    tokensPerRound: TOKENS_PER_ROUND,
+    tokensPerDay: TOKENS_PER_ROUND * 24, // 24 rounds per day
+    tokensPerRoundBaseUnits: PAYOUT_PER_ROUND,
+    roundDurationHours: 1,
+    roundsPerDay: 24,
+    description: "3 tokens per successful node per round",
+    dynamic: true,
+    testing: true
+  };
+}
+
 // Log file path
 const REWARD_LOG = path.resolve(process.cwd(), 'rewards.json');
 
