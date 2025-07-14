@@ -65,7 +65,7 @@ environment: "PRODUCTION"
 
 #################################### BELOW IS FOR UPDATE TASK ONLY ####################################
 # Old Task ID: (ONLY for task update) 
-task_id: 'DTpPbwBxDqtpjfe9cfHSnLg2EG7ya4ypv5zDgJiyQ2cw'
+task_id: 'HqYSDZsUP7FBoj5KtpKw92o183EJePKGh2ociYLomyCk'
 
 # Migration Description: (ONLY for task update)
 migrationDescription: 'Production scaling: Updated bounty limits to support 30 nodes max at 3 tokens per round (90 tokens/round), increased total bounty for production deployment'
