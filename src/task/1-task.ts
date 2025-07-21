@@ -4,12 +4,40 @@ import { StaticCacheManager } from './static-cache-manager';
 
 export interface TaskSubmissionData {
   static: {
-    cpuModel: string;
-    ramSize: number;
-    ssdType: string;
-    osType: string;
-    osVersion: string;
-    nodeArch: string;
+    wanIp: string;
+    lanIp: string;
+    cpu: {
+      model: string;
+      coresPhysical: number;
+      coresLogical: number;
+      frequencyGHz?: number;
+    };
+    ram: {
+      totalMB: number;
+      type?: string;
+    };
+    storage: {
+      totalGB: number;
+      deviceCount: number;
+    };
+    gpu: {
+      present: boolean;
+      vendor?: string;
+      model?: string;
+    };
+    os: {
+      platform: string;
+      distro?: string;
+      isVirtual: boolean;
+      virtualPlatform?: string;
+    };
+    network: {
+      nicModel?: string;
+    };
+    system: {
+      arch: string;
+      hostname: string;
+    };
   } | null;
   dynamic: {
     uptime: number;
@@ -56,12 +84,40 @@ export async function task(roundNumber: number): Promise<void> {
     // Create structured submission data
     const submissionData: TaskSubmissionData = {
       static: staticChangeResult.hasChanged ? {
-        cpuModel: staticChangeResult.currentData.cpuModel,
-        ramSize: staticChangeResult.currentData.ramSize,
-        ssdType: staticChangeResult.currentData.ssdType,
-        osType: staticChangeResult.currentData.osType,
-        osVersion: staticChangeResult.currentData.osVersion,
-        nodeArch: staticChangeResult.currentData.nodeArch
+        wanIp: staticChangeResult.currentData.wanIp,
+        lanIp: staticChangeResult.currentData.lanIp,
+        cpu: {
+          model: staticChangeResult.currentData.cpu.model,
+          coresPhysical: staticChangeResult.currentData.cpu.coresPhysical,
+          coresLogical: staticChangeResult.currentData.cpu.coresLogical,
+          frequencyGHz: staticChangeResult.currentData.cpu.frequencyGHz
+        },
+        ram: {
+          totalMB: staticChangeResult.currentData.ram.totalMB,
+          type: staticChangeResult.currentData.ram.type
+        },
+        storage: {
+          totalGB: staticChangeResult.currentData.storage.totalGB,
+          deviceCount: staticChangeResult.currentData.storage.devices.length
+        },
+        gpu: {
+          present: staticChangeResult.currentData.gpu.present,
+          vendor: staticChangeResult.currentData.gpu.vendor,
+          model: staticChangeResult.currentData.gpu.model
+        },
+        os: {
+          platform: staticChangeResult.currentData.os.platform,
+          distro: staticChangeResult.currentData.os.distro,
+          isVirtual: staticChangeResult.currentData.os.isVirtual,
+          virtualPlatform: staticChangeResult.currentData.os.virtualPlatform
+        },
+        network: {
+          nicModel: staticChangeResult.currentData.network.nicModel
+        },
+        system: {
+          arch: staticChangeResult.currentData.system.arch,
+          hostname: staticChangeResult.currentData.system.hostname
+        }
       } : null,
       dynamic: {
         uptime: currentUptimeSeconds

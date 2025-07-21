@@ -131,11 +131,21 @@ function createOptimizedSubmission(data: TaskSubmissionData): any {
   // Only include static data if it changed
   if (data.static && data.metadata.staticChanged) {
     submission.s = { // static
-      c: data.static.cpuModel.substring(0, 30), // Truncate CPU model if too long
-      r: data.static.ramSize,
-      d: data.static.ssdType.substring(0, 20), // Truncate disk type if too long
-      o: data.static.osType,
-      a: data.static.nodeArch
+      w: data.static.wanIp.substring(0, 15), // WAN IP
+      l: data.static.lanIp.substring(0, 15), // LAN IP
+      c: data.static.cpu.model.substring(0, 25), // CPU model (truncated)
+      cp: data.static.cpu.coresPhysical, // CPU cores
+      r: Math.round(data.static.ram.totalMB / 1024), // RAM in GB
+      rt: data.static.ram.type?.substring(0, 10) || 'Unknown', // RAM type
+      st: data.static.storage.totalGB, // Storage total
+      sd: data.static.storage.deviceCount, // Storage device count
+      g: data.static.gpu.present ? 1 : 0, // GPU present
+      gv: data.static.gpu.vendor?.substring(0, 10) || '', // GPU vendor
+      o: data.static.os.platform.substring(0, 10), // OS platform
+      v: data.static.os.isVirtual ? 1 : 0, // Is virtual
+      n: data.static.network.nicModel?.substring(0, 15) || '', // Network interface
+      a: data.static.system.arch, // Architecture
+      h: data.static.system.hostname.substring(0, 20) // Hostname
     };
   }
   

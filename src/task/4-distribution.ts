@@ -59,7 +59,7 @@ export const distribution = async (
       // Log any other available properties
       ...Object.keys(submitter).reduce((acc, key) => {
         if (key !== 'publicKey' && key !== 'votes') {
-          acc[key] = submitter[key];
+          acc[key] = (submitter as any)[key];
         }
         return acc;
       }, {} as any)
@@ -83,6 +83,9 @@ export const distribution = async (
       console.log(`❌ REJECTED: ${submitter.publicKey} with ${submitter.votes} votes - NO REWARDS`);
       failedSubmitters.push(submitter.publicKey);
       distributionList[submitter.publicKey] = 0;
+      
+      // Enhanced logging for rewards tracking
+      console.warn(`🚫 REJECTED: ${submitter.publicKey} — audit failed or insufficient votes`);
     }
   }
   
@@ -112,11 +115,15 @@ export const distribution = async (
     const rewardPerNode = TOKENS_PER_ROUND * Math.pow(10, TOKEN_DECIMALS); // 3 tokens = 3,000,000,000 base units
     rewardedNodes.forEach((candidate) => {
       distributionList[candidate] = rewardPerNode;
+      // Enhanced logging for rewards tracking
+      console.log(`🎁 REWARDED: ${candidate} with ${TOKENS_PER_ROUND} tokens for round ${roundNumber}`);
     });
     
     // Give 0 tokens to the remaining nodes (they won't be penalized, just not rewarded)
     unrewardedNodes.forEach((candidate) => {
       distributionList[candidate] = 0;
+      // Enhanced logging for rewards tracking
+      console.warn(`🚫 REJECTED: ${candidate} — exceeded round limit (${MAX_NODES_PER_ROUND} max nodes per round)`);
     });
     
     console.log(`REWARDED NODES: ${rewardedNodes.length} nodes with ${TOKENS_PER_ROUND} tokens each`);
@@ -124,12 +131,17 @@ export const distribution = async (
     console.log(`TOTAL TOKENS DISTRIBUTED THIS ROUND: ${rewardedNodes.length * TOKENS_PER_ROUND} tokens`);
     console.log(`TOTAL TOKENS DISTRIBUTED PER DAY: ${rewardedNodes.length * TOKENS_PER_DAY_PER_NODE} tokens`);
     
+    // Round summary for easy tracking
+    console.log(`📊 ROUND SUMMARY: ${rewardedNodes.length} rewarded / ${unrewardedNodes.length + failedSubmitters.length} rejected`);
+    
   } else {
     // Normal case: All approved nodes get exactly 3 tokens each
     const rewardPerNode = TOKENS_PER_ROUND * Math.pow(10, TOKEN_DECIMALS); // 3 tokens
     
     approvedSubmitters.forEach((candidate) => {
       distributionList[candidate] = rewardPerNode; // Each node gets exactly 3 tokens
+      // Enhanced logging for rewards tracking
+      console.log(`🎁 REWARDED: ${candidate} with ${TOKENS_PER_ROUND} tokens for round ${roundNumber}`);
     });
     
     const totalTokensDistributedThisRound = approvedSubmitters.length * TOKENS_PER_ROUND;
@@ -137,6 +149,9 @@ export const distribution = async (
     console.log(`REWARD PER NODE: ${TOKENS_PER_ROUND} tokens (${rewardPerNode} base units)`);
     console.log(`TOTAL TOKENS DISTRIBUTED THIS ROUND: ${totalTokensDistributedThisRound} tokens`);
     console.log(`TOTAL TOKENS DISTRIBUTED PER DAY: ${approvedSubmitters.length * TOKENS_PER_DAY_PER_NODE} tokens`);
+    
+    // Round summary for easy tracking
+    console.log(`📊 ROUND SUMMARY: ${approvedSubmitters.length} rewarded / ${failedSubmitters.length} rejected`);
   }
   
   return distributionList;

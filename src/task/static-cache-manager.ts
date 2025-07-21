@@ -137,32 +137,81 @@ export class StaticCacheManager {
 
   /**
    * Identify specific changes between old and new static data
+   * Uses safe property access to prevent crashes on undefined/null data
    */
   private identifyChanges(oldData: StaticHardwareData, newData: StaticHardwareData): string[] {
     const changes: string[] = [];
 
-    if (oldData.cpuModel !== newData.cpuModel) {
-      changes.push(`CPU: ${oldData.cpuModel} → ${newData.cpuModel}`);
+    // CPU changes - safe property access
+    if (oldData?.cpu && newData?.cpu) {
+      if ((oldData.cpu.model || '') !== (newData.cpu.model || '')) {
+        changes.push(`CPU Model: ${oldData.cpu.model || 'Unknown'} → ${newData.cpu.model || 'Unknown'}`);
+      }
+      if ((oldData.cpu.coresPhysical || 0) !== (newData.cpu.coresPhysical || 0)) {
+        changes.push(`CPU Cores: ${oldData.cpu.coresPhysical || 0} → ${newData.cpu.coresPhysical || 0}`);
+      }
     }
 
-    if (oldData.ramSize !== newData.ramSize) {
-      changes.push(`RAM: ${oldData.ramSize}GB → ${newData.ramSize}GB`);
+    // RAM changes - safe property access
+    if (oldData?.ram && newData?.ram) {
+      if ((oldData.ram.totalMB || 0) !== (newData.ram.totalMB || 0)) {
+        const oldGB = Math.round((oldData.ram.totalMB || 0) / 1024);
+        const newGB = Math.round((newData.ram.totalMB || 0) / 1024);
+        changes.push(`RAM: ${oldGB}GB → ${newGB}GB`);
+      }
+      if ((oldData.ram.type || '') !== (newData.ram.type || '')) {
+        changes.push(`RAM Type: ${oldData.ram.type || 'Unknown'} → ${newData.ram.type || 'Unknown'}`);
+      }
     }
 
-    if (oldData.ssdType !== newData.ssdType) {
-      changes.push(`Storage: ${oldData.ssdType} → ${newData.ssdType}`);
+    // Storage changes - safe property access
+    if (oldData?.storage && newData?.storage) {
+      if ((oldData.storage.totalGB || 0) !== (newData.storage.totalGB || 0)) {
+        changes.push(`Storage: ${oldData.storage.totalGB || 0}GB → ${newData.storage.totalGB || 0}GB`);
+      }
+      if ((oldData.storage.devices?.length || 0) !== (newData.storage.devices?.length || 0)) {
+        changes.push(`Storage Devices: ${oldData.storage.devices?.length || 0} → ${newData.storage.devices?.length || 0}`);
+      }
     }
 
-    if (oldData.osType !== newData.osType) {
-      changes.push(`OS Type: ${oldData.osType} → ${newData.osType}`);
+    // GPU changes - safe property access
+    if (oldData?.gpu && newData?.gpu) {
+      if ((oldData.gpu.present ?? false) !== (newData.gpu.present ?? false)) {
+        changes.push(`GPU: ${oldData.gpu.present ? 'Present' : 'None'} → ${newData.gpu.present ? 'Present' : 'None'}`);
+      }
+      if (oldData.gpu.present && newData.gpu.present && (oldData.gpu.model || '') !== (newData.gpu.model || '')) {
+        changes.push(`GPU Model: ${oldData.gpu.model || 'Unknown'} → ${newData.gpu.model || 'Unknown'}`);
+      }
     }
 
-    if (oldData.osVersion !== newData.osVersion) {
-      changes.push(`OS Version: ${oldData.osVersion} → ${newData.osVersion}`);
+    // OS changes - safe property access
+    if (oldData?.os && newData?.os) {
+      if ((oldData.os.platform || '') !== (newData.os.platform || '')) {
+        changes.push(`OS Platform: ${oldData.os.platform || 'Unknown'} → ${newData.os.platform || 'Unknown'}`);
+      }
+      if ((oldData.os.distro || '') !== (newData.os.distro || '')) {
+        changes.push(`OS Version: ${oldData.os.distro || 'Unknown'} → ${newData.os.distro || 'Unknown'}`);
+      }
+      if ((oldData.os.isVirtual ?? false) !== (newData.os.isVirtual ?? false)) {
+        changes.push(`Virtualization: ${oldData.os.isVirtual ? 'Virtual' : 'Physical'} → ${newData.os.isVirtual ? 'Virtual' : 'Physical'}`);
+      }
     }
 
-    if (oldData.nodeArch !== newData.nodeArch) {
-      changes.push(`Architecture: ${oldData.nodeArch} → ${newData.nodeArch}`);
+    // Network changes - safe property access
+    if (oldData?.network && newData?.network) {
+      if ((oldData.network.nicModel || '') !== (newData.network.nicModel || '')) {
+        changes.push(`Network: ${oldData.network.nicModel || 'Unknown'} → ${newData.network.nicModel || 'Unknown'}`);
+      }
+    }
+
+    // System architecture changes - safe property access
+    if (oldData?.system && newData?.system) {
+      if ((oldData.system.arch || '') !== (newData.system.arch || '')) {
+        changes.push(`Architecture: ${oldData.system.arch || 'Unknown'} → ${newData.system.arch || 'Unknown'}`);
+      }
+      if ((oldData.system.hostname || '') !== (newData.system.hostname || '')) {
+        changes.push(`Hostname: ${oldData.system.hostname || 'Unknown'} → ${newData.system.hostname || 'Unknown'}`);
+      }
     }
 
     return changes;

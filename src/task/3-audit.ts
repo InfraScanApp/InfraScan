@@ -29,11 +29,21 @@ interface HardwareSubmissionData {
 // New optimized submission format with short property names
 interface OptimizedSubmissionData {
   s?: { // static hardware data
+    w: string; // WAN IP
+    l: string; // LAN IP
     c: string; // CPU model
+    cp: number; // CPU cores physical
     r: number; // RAM size in GB
-    d: string; // disk/storage type
-    o: string; // OS type
-    a: string; // architecture
+    rt: string; // RAM type
+    st: number; // Storage total GB
+    sd: number; // Storage device count
+    g: number; // GPU present (0/1)
+    gv: string; // GPU vendor
+    o: string; // OS platform
+    v: number; // Is virtual (0/1)
+    n: string; // Network interface
+    a: string; // Architecture
+    h: string; // Hostname
   };
   d: { // dynamic data
     u: number; // uptime in seconds
@@ -67,18 +77,21 @@ export async function audit(
     if (!submission || typeof submission !== 'string') {
       console.log(`❌ Invalid submission parameter from ${submitterKey}: ${typeof submission}`);
       console.log(`🔄 AUDIT RESULT: Returning FALSE for ${submitterKey} (invalid submission)`);
+      console.warn(`❌ AUDIT REJECTED: ${submitterKey}`);
       return false;
     }
     
     if (typeof roundNumber !== 'number' || roundNumber < 0) {
       console.log(`❌ Invalid round number from ${submitterKey}: ${roundNumber}`);
       console.log(`🔄 AUDIT RESULT: Returning FALSE for ${submitterKey} (invalid round)`);
+      console.warn(`❌ AUDIT REJECTED: ${submitterKey}`);
       return false;
     }
     
     if (!submitterKey || typeof submitterKey !== 'string') {
       console.log(`❌ Invalid submitter key: ${typeof submitterKey}`);
       console.log(`🔄 AUDIT RESULT: Returning FALSE for ${submitterKey} (invalid key)`);
+      console.warn(`❌ AUDIT REJECTED: ${submitterKey}`);
       return false;
     }
 
@@ -91,6 +104,14 @@ export async function audit(
         const result = validateOptimizedSubmission(submissionData, submitterKey);
         console.log(`🎯 FINAL AUDIT DECISION: ${result ? 'APPROVE' : 'REJECT'} for ${submitterKey} (optimized format)`);
         console.log(`🔄 Main audit function returning: ${result} for ${submitterKey} (optimized format)`);
+        
+        // Enhanced logging for rewards tracking
+        if (result) {
+          console.log(`✅ AUDIT PASSED: ${submitterKey}`);
+        } else {
+          console.warn(`❌ AUDIT REJECTED: ${submitterKey}`);
+        }
+        
         return result;
       }
       
@@ -99,6 +120,14 @@ export async function audit(
         const result = validateUptimeSubmission(submissionData, submitterKey);
         console.log(`🎯 FINAL AUDIT DECISION: ${result ? 'APPROVE' : 'REJECT'} for ${submitterKey} (legacy uptime)`);
         console.log(`🔄 Main audit function returning: ${result} for ${submitterKey} (legacy uptime)`);
+        
+        // Enhanced logging for rewards tracking
+        if (result) {
+          console.log(`✅ AUDIT PASSED: ${submitterKey}`);
+        } else {
+          console.warn(`❌ AUDIT REJECTED: ${submitterKey}`);
+        }
+        
         return result;
       }
       
@@ -107,6 +136,14 @@ export async function audit(
         const result = validateHardwareSubmission(submissionData, submitterKey);
         console.log(`🎯 FINAL AUDIT DECISION: ${result ? 'APPROVE' : 'REJECT'} for ${submitterKey} (hardware)`);
         console.log(`🔄 Main audit function returning: ${result} for ${submitterKey} (hardware)`);
+        
+        // Enhanced logging for rewards tracking
+        if (result) {
+          console.log(`✅ AUDIT PASSED: ${submitterKey}`);
+        } else {
+          console.warn(`❌ AUDIT REJECTED: ${submitterKey}`);
+        }
+        
         return result;
       }
       
@@ -114,6 +151,10 @@ export async function audit(
       console.log(`Unknown submission structure from ${submitterKey}:`, submissionData);
       console.log(`🎯 FINAL AUDIT DECISION: REJECT for ${submitterKey} (unknown structure)`);
       console.log(`🔄 Main audit function returning: false for ${submitterKey} (unknown structure)`);
+      
+      // Enhanced logging for rewards tracking
+      console.warn(`❌ AUDIT REJECTED: ${submitterKey}`);
+      
       return false;
       
     } catch (jsonError) {
@@ -125,12 +166,24 @@ export async function audit(
         const result = validateStringSubmission(submission, submitterKey);
         console.log(`🎯 FINAL AUDIT DECISION: ${result ? 'APPROVE' : 'REJECT'} for ${submitterKey} (string validation)`);
         console.log(`🔄 Main audit function returning: ${result} for ${submitterKey} (string validation)`);
+        
+        // Enhanced logging for rewards tracking
+        if (result) {
+          console.log(`✅ AUDIT PASSED: ${submitterKey}`);
+        } else {
+          console.warn(`❌ AUDIT REJECTED: ${submitterKey}`);
+        }
+        
         return result;
       }
       
       console.log(`Invalid submission format from ${submitterKey}`);
       console.log(`🎯 FINAL AUDIT DECISION: REJECT for ${submitterKey} (invalid format)`);
       console.log(`🔄 Main audit function returning: false for ${submitterKey} (invalid format)`);
+      
+      // Enhanced logging for rewards tracking
+      console.warn(`❌ AUDIT REJECTED: ${submitterKey}`);
+      
       return false;
     }
     
@@ -140,6 +193,10 @@ export async function audit(
     console.error(`Stack trace:`, error instanceof Error ? error.stack : 'No stack trace available');
     console.log(`🎯 FINAL AUDIT DECISION: REJECT for ${submitterKey} (critical error)`);
     console.log(`🔄 Main audit function returning: false for ${submitterKey} (critical error caught)`);
+    
+    // Enhanced logging for rewards tracking
+    console.warn(`❌ AUDIT REJECTED: ${submitterKey}`);
+    
     return false;
   }
 }
@@ -193,9 +250,13 @@ function isOptimizedSubmission(data: any): data is OptimizedSubmissionData {
     // Static data is optional but if present, must be valid
     (data.s === undefined || (
       typeof data.s === 'object' &&
+      typeof data.s.w === 'string' &&
+      typeof data.s.l === 'string' &&
       typeof data.s.c === 'string' &&
+      typeof data.s.cp === 'number' &&
       typeof data.s.r === 'number' &&
-      typeof data.s.d === 'string' &&
+      typeof data.s.rt === 'string' &&
+      typeof data.s.st === 'number' &&
       typeof data.s.o === 'string' &&
       typeof data.s.a === 'string'
     ))
@@ -230,6 +291,13 @@ function validateOptimizedSubmission(data: OptimizedSubmissionData, submitterKey
   
   const timeDiffHours = timeDiff / (60 * 60 * 1000);
   console.log(`Time difference for ${submitterKey}: ${timeDiffHours.toFixed(2)} hours`);
+  
+  // Log whether submission age is valid or stale
+  if (timeDiffHours <= 1.5 && timeDiffHours >= 0) {
+    console.log(`⏱️ Submission age valid: ${timeDiffHours.toFixed(2)} hours`);
+  } else {
+    console.warn(`⚠️ Submission age STALE: ${timeDiffHours.toFixed(2)} hours — check node clock or network delay`);
+  }
   
   if (timeDiff > maxTimeDiff) {
     console.log(`❌ Timestamp out of range from ${submitterKey}: ${new Date(data.m.t).toISOString()} (current: ${new Date(now).toISOString()}, diff: ${timeDiffHours.toFixed(2)} hours)`);
@@ -266,29 +334,68 @@ function validateOptimizedSubmission(data: OptimizedSubmissionData, submitterKey
   }
 
   // Validate static data if present
-  if (data.s) {
-    // Validate CPU model
-    if (!data.s.c || data.s.c.trim().length === 0 || data.s.c.length > 100) {
+  if (data.s && typeof data.s === 'object') {
+    // Validate IP addresses
+    if (!data.s.w || data.s.w.length === 0 || data.s.w === 'unknown') {
+      console.log(`❌ Invalid WAN IP from ${submitterKey}: ${data.s.w}`);
+      return false;
+    }
+
+    if (!data.s.l || data.s.l.length === 0 || data.s.l === 'unknown') {
+      console.log(`❌ Invalid LAN IP from ${submitterKey}: ${data.s.l}`);
+      return false;
+    }
+
+    // Validate CPU model and cores
+    if (!data.s.c || data.s.c.trim().length === 0 || data.s.c.length > 50) {
       console.log(`❌ Invalid CPU model from ${submitterKey}: ${data.s.c}`);
       return false;
     }
 
-    // Validate RAM size (reasonable range: 1GB to 1TB)
-    if (data.s.r < 1 || data.s.r > 1024) {
+    if (data.s.cp < 1 || data.s.cp > 256) {
+      console.log(`❌ Invalid CPU core count from ${submitterKey}: ${data.s.cp}`);
+      return false;
+    }
+
+    // Validate RAM size (reasonable range: 1GB to 2TB)
+    if (data.s.r < 1 || data.s.r > 2048) {
       console.log(`❌ Invalid RAM size from ${submitterKey}: ${data.s.r}GB`);
       return false;
     }
 
-    // Validate storage type
-    if (!data.s.d || data.s.d.trim().length === 0 || data.s.d.length > 50) {
-      console.log(`❌ Invalid storage type from ${submitterKey}: ${data.s.d}`);
+    // Validate RAM type
+    if (!data.s.rt || data.s.rt.trim().length === 0) {
+      console.log(`❌ Invalid RAM type from ${submitterKey}: ${data.s.rt}`);
       return false;
     }
 
-    // Validate OS type
-    const validOSTypes = ['linux', 'darwin', 'win32', 'freebsd', 'openbsd', 'netbsd', 'aix', 'sunos'];
-    if (!validOSTypes.includes(data.s.o)) {
-      console.log(`❌ Invalid OS type from ${submitterKey}: ${data.s.o}`);
+    // Validate storage
+    if (data.s.st < 1 || data.s.st > 100000) {
+      console.log(`❌ Invalid storage size from ${submitterKey}: ${data.s.st}GB`);
+      return false;
+    }
+
+    if (data.s.sd < 1 || data.s.sd > 20) {
+      console.log(`❌ Invalid storage device count from ${submitterKey}: ${data.s.sd}`);
+      return false;
+    }
+
+    // Validate GPU flag
+    if (data.s.g !== 0 && data.s.g !== 1) {
+      console.log(`❌ Invalid GPU present flag from ${submitterKey}: ${data.s.g}`);
+      return false;
+    }
+
+    // Validate OS platform
+    const validOSTypes = ['Linux', 'macOS', 'Windows'];
+    if (!validOSTypes.some(os => data.s!.o.includes(os))) {
+      console.log(`❌ Invalid OS platform from ${submitterKey}: ${data.s!.o}`);
+      return false;
+    }
+
+    // Validate virtualization flag
+    if (data.s.v !== 0 && data.s.v !== 1) {
+      console.log(`❌ Invalid virtualization flag from ${submitterKey}: ${data.s.v}`);
       return false;
     }
 
@@ -296,6 +403,12 @@ function validateOptimizedSubmission(data: OptimizedSubmissionData, submitterKey
     const validArchs = ['x64', 'arm64', 'ia32', 'arm', 's390x', 'ppc64'];
     if (!validArchs.includes(data.s.a)) {
       console.log(`❌ Invalid architecture from ${submitterKey}: ${data.s.a}`);
+      return false;
+    }
+
+    // Validate hostname
+    if (!data.s.h || data.s.h.trim().length === 0 || data.s.h.length > 30) {
+      console.log(`❌ Invalid hostname from ${submitterKey}: ${data.s.h}`);
       return false;
     }
   }
@@ -352,6 +465,13 @@ function validateUptimeSubmission(data: UptimeSubmissionData, submitterKey: stri
   // For debugging: log the time difference
   const timeDiffHours = timeDiff / (60 * 60 * 1000);
   console.log(`Time difference for ${submitterKey}: ${timeDiffHours.toFixed(2)} hours`);
+  
+  // Log whether submission age is valid or stale
+  if (timeDiffHours <= 1.5 && timeDiffHours >= 0) {
+    console.log(`⏱️ Submission age valid: ${timeDiffHours.toFixed(2)} hours`);
+  } else {
+    console.warn(`⚠️ Submission age STALE: ${timeDiffHours.toFixed(2)} hours — check node clock or network delay`);
+  }
   
   if (timeDiff > maxTimeDiff) {
     console.log(`❌ Timestamp out of range from ${submitterKey}: ${new Date(data.timestamp).toISOString()} (current: ${new Date(now).toISOString()}, diff: ${timeDiffHours.toFixed(2)} hours)`);
