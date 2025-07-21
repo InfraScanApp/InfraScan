@@ -10,7 +10,7 @@
 
 interface UptimeSubmissionData {
   uptime: number;
-  monthlyUptime: number;
+  monthlyUptime?: number;
   timestamp: number;
   date: string;
 }
@@ -26,7 +26,27 @@ interface HardwareSubmissionData {
   date?: string;
 }
 
-type SubmissionData = UptimeSubmissionData | HardwareSubmissionData | string;
+// New optimized submission format with short property names
+interface OptimizedSubmissionData {
+  s?: { // static hardware data
+    c: string; // CPU model
+    r: number; // RAM size in GB
+    d: string; // disk/storage type
+    o: string; // OS type
+    a: string; // architecture
+  };
+  d: { // dynamic data
+    u: number; // uptime in seconds
+  };
+  m: { // metadata
+    sc: boolean; // static changed flag
+    t: number; // timestamp
+    r: number; // round number
+  };
+  w?: string; // wallet address
+}
+
+type SubmissionData = UptimeSubmissionData | HardwareSubmissionData | OptimizedSubmissionData | string;
 
 export async function audit(
   submission: string,
@@ -38,46 +58,61 @@ export async function audit(
    * This function should return true if the submission is correct, false otherwise
    * CRITICAL: This function MUST always return a boolean, never undefined or throw
    */
-  console.log(`AUDIT SUBMISSION FOR ROUND ${roundNumber} from ${submitterKey}`);
+  console.log(`🔍 AUDIT SUBMISSION FOR ROUND ${roundNumber} from ${submitterKey}`);
+  console.log(`📋 AUDIT INPUT: submission=${submission?.substring(0, 100)}${submission?.length > 100 ? '...' : ''}, round=${roundNumber}, submitter=${submitterKey}`);
   
   // Wrap everything in try-catch to ensure we ALWAYS return a boolean
   try {
     // Validate input parameters
     if (!submission || typeof submission !== 'string') {
       console.log(`❌ Invalid submission parameter from ${submitterKey}: ${typeof submission}`);
+      console.log(`🔄 AUDIT RESULT: Returning FALSE for ${submitterKey} (invalid submission)`);
       return false;
     }
     
     if (typeof roundNumber !== 'number' || roundNumber < 0) {
       console.log(`❌ Invalid round number from ${submitterKey}: ${roundNumber}`);
+      console.log(`🔄 AUDIT RESULT: Returning FALSE for ${submitterKey} (invalid round)`);
       return false;
     }
     
     if (!submitterKey || typeof submitterKey !== 'string') {
       console.log(`❌ Invalid submitter key: ${typeof submitterKey}`);
+      console.log(`🔄 AUDIT RESULT: Returning FALSE for ${submitterKey} (invalid key)`);
       return false;
     }
-    
+
     // Try to parse as JSON first (for structured data)
     try {
       const submissionData = JSON.parse(submission);
       
-      // Phase 1: Validate uptime data
+      // Check for new optimized submission format
+      if (isOptimizedSubmission(submissionData)) {
+        const result = validateOptimizedSubmission(submissionData, submitterKey);
+        console.log(`🎯 FINAL AUDIT DECISION: ${result ? 'APPROVE' : 'REJECT'} for ${submitterKey} (optimized format)`);
+        console.log(`🔄 Main audit function returning: ${result} for ${submitterKey} (optimized format)`);
+        return result;
+      }
+      
+      // Phase 1: Validate uptime data (legacy format)
       if (isUptimeSubmission(submissionData)) {
         const result = validateUptimeSubmission(submissionData, submitterKey);
-        console.log(`🔄 Main audit function returning: ${result} for ${submitterKey}`);
+        console.log(`🎯 FINAL AUDIT DECISION: ${result ? 'APPROVE' : 'REJECT'} for ${submitterKey} (legacy uptime)`);
+        console.log(`🔄 Main audit function returning: ${result} for ${submitterKey} (legacy uptime)`);
         return result;
       }
       
       // Future Phase: Validate hardware data
       if (isHardwareSubmission(submissionData)) {
         const result = validateHardwareSubmission(submissionData, submitterKey);
-        console.log(`🔄 Main audit function returning: ${result} for ${submitterKey}`);
+        console.log(`🎯 FINAL AUDIT DECISION: ${result ? 'APPROVE' : 'REJECT'} for ${submitterKey} (hardware)`);
+        console.log(`🔄 Main audit function returning: ${result} for ${submitterKey} (hardware)`);
         return result;
       }
       
       // If it's valid JSON but unknown structure, reject
       console.log(`Unknown submission structure from ${submitterKey}:`, submissionData);
+      console.log(`🎯 FINAL AUDIT DECISION: REJECT for ${submitterKey} (unknown structure)`);
       console.log(`🔄 Main audit function returning: false for ${submitterKey} (unknown structure)`);
       return false;
       
@@ -88,11 +123,13 @@ export async function audit(
       // Fallback: Check for simple string submissions
       if (typeof submission === 'string') {
         const result = validateStringSubmission(submission, submitterKey);
+        console.log(`🎯 FINAL AUDIT DECISION: ${result ? 'APPROVE' : 'REJECT'} for ${submitterKey} (string validation)`);
         console.log(`🔄 Main audit function returning: ${result} for ${submitterKey} (string validation)`);
         return result;
       }
       
       console.log(`Invalid submission format from ${submitterKey}`);
+      console.log(`🎯 FINAL AUDIT DECISION: REJECT for ${submitterKey} (invalid format)`);
       console.log(`🔄 Main audit function returning: false for ${submitterKey} (invalid format)`);
       return false;
     }
@@ -101,6 +138,7 @@ export async function audit(
     // CRITICAL: Catch ANY error and return false instead of undefined
     console.error(`🚨 CRITICAL ERROR in audit function for ${submitterKey}:`, error);
     console.error(`Stack trace:`, error instanceof Error ? error.stack : 'No stack trace available');
+    console.log(`🎯 FINAL AUDIT DECISION: REJECT for ${submitterKey} (critical error)`);
     console.log(`🔄 Main audit function returning: false for ${submitterKey} (critical error caught)`);
     return false;
   }
@@ -136,6 +174,146 @@ function isHardwareSubmission(data: any): data is HardwareSubmissionData {
 }
 
 /**
+ * Check if submission is new optimized format
+ */
+function isOptimizedSubmission(data: any): data is OptimizedSubmissionData {
+  return (
+    typeof data === 'object' &&
+    data !== null &&
+    // Must have dynamic data
+    data.d &&
+    typeof data.d === 'object' &&
+    typeof data.d.u === 'number' &&
+    // Must have metadata
+    data.m &&
+    typeof data.m === 'object' &&
+    typeof data.m.sc === 'boolean' &&
+    typeof data.m.t === 'number' &&
+    typeof data.m.r === 'number' &&
+    // Static data is optional but if present, must be valid
+    (data.s === undefined || (
+      typeof data.s === 'object' &&
+      typeof data.s.c === 'string' &&
+      typeof data.s.r === 'number' &&
+      typeof data.s.d === 'string' &&
+      typeof data.s.o === 'string' &&
+      typeof data.s.a === 'string'
+    ))
+  );
+}
+
+/**
+ * Validate optimized submission data (New format)
+ */
+function validateOptimizedSubmission(data: OptimizedSubmissionData, submitterKey: string): boolean {
+  console.log(`Validating optimized submission from ${submitterKey}:`, {
+    uptime: data.d.u,
+    staticChanged: data.m.sc,
+    timestamp: data.m.t,
+    roundNumber: data.m.r,
+    hasStatic: !!data.s,
+    hasWallet: !!data.w,
+    submissionTime: new Date(data.m.t).toISOString(),
+    currentTime: new Date().toISOString()
+  });
+
+  // Validate uptime - must be positive to avoid rewarding rebooted nodes
+  if (typeof data.d.u !== 'number' || data.d.u <= 0 || data.d.u > 31536000) { // Max 1 year in seconds
+    console.log(`❌ Invalid uptime value from ${submitterKey}: ${data.d.u} (must be positive number)`);
+    return false;
+  }
+
+  // Validate timestamp (same rules as legacy format)
+  const now = Date.now();
+  const timeDiff = Math.abs(now - data.m.t);
+  const maxTimeDiff = 6 * 60 * 60 * 1000; // 6 hours tolerance
+  
+  const timeDiffHours = timeDiff / (60 * 60 * 1000);
+  console.log(`Time difference for ${submitterKey}: ${timeDiffHours.toFixed(2)} hours`);
+  
+  if (timeDiff > maxTimeDiff) {
+    console.log(`❌ Timestamp out of range from ${submitterKey}: ${new Date(data.m.t).toISOString()} (current: ${new Date(now).toISOString()}, diff: ${timeDiffHours.toFixed(2)} hours)`);
+    return false;
+  }
+
+  // Validate that timestamp is not too far in the future or past
+  const oneYearMs = 365 * 24 * 60 * 60 * 1000;
+  if (data.m.t > now + oneYearMs) {
+    console.log(`❌ Timestamp too far in future from ${submitterKey}: ${new Date(data.m.t).toISOString()}`);
+    return false;
+  }
+  
+  if (data.m.t < now - oneYearMs) {
+    console.log(`❌ Timestamp too far in past from ${submitterKey}: ${new Date(data.m.t).toISOString()}`);
+    return false;
+  }
+
+  // Validate round number
+  if (data.m.r < 0 || data.m.r > 1000000) { // Reasonable upper bound
+    console.log(`❌ Invalid round number from ${submitterKey}: ${data.m.r}`);
+    return false;
+  }
+
+  // Validate static data consistency
+  if (data.m.sc && !data.s) {
+    console.log(`❌ Static changed flag is true but no static data provided from ${submitterKey}`);
+    return false;
+  }
+
+  if (!data.m.sc && data.s) {
+    console.log(`❌ Static data provided but changed flag is false from ${submitterKey}`);
+    return false;
+  }
+
+  // Validate static data if present
+  if (data.s) {
+    // Validate CPU model
+    if (!data.s.c || data.s.c.trim().length === 0 || data.s.c.length > 100) {
+      console.log(`❌ Invalid CPU model from ${submitterKey}: ${data.s.c}`);
+      return false;
+    }
+
+    // Validate RAM size (reasonable range: 1GB to 1TB)
+    if (data.s.r < 1 || data.s.r > 1024) {
+      console.log(`❌ Invalid RAM size from ${submitterKey}: ${data.s.r}GB`);
+      return false;
+    }
+
+    // Validate storage type
+    if (!data.s.d || data.s.d.trim().length === 0 || data.s.d.length > 50) {
+      console.log(`❌ Invalid storage type from ${submitterKey}: ${data.s.d}`);
+      return false;
+    }
+
+    // Validate OS type
+    const validOSTypes = ['linux', 'darwin', 'win32', 'freebsd', 'openbsd', 'netbsd', 'aix', 'sunos'];
+    if (!validOSTypes.includes(data.s.o)) {
+      console.log(`❌ Invalid OS type from ${submitterKey}: ${data.s.o}`);
+      return false;
+    }
+
+    // Validate architecture
+    const validArchs = ['x64', 'arm64', 'ia32', 'arm', 's390x', 'ppc64'];
+    if (!validArchs.includes(data.s.a)) {
+      console.log(`❌ Invalid architecture from ${submitterKey}: ${data.s.a}`);
+      return false;
+    }
+  }
+
+  // Validate wallet address if present (basic Solana pubkey format check)
+  if (data.w) {
+    if (data.w.length < 32 || data.w.length > 44) {
+      console.log(`❌ Invalid wallet address length from ${submitterKey}: ${data.w.length}`);
+      return false;
+    }
+  }
+
+  console.log(`✅ Valid optimized submission from ${submitterKey}`);
+  console.log(`🎯 OPTIMIZED AUDIT DECISION: APPROVE - Data passes all validation checks`);
+  return true;
+}
+
+/**
  * Validate uptime submission data (Phase 1)
  */
 function validateUptimeSubmission(data: UptimeSubmissionData, submitterKey: string): boolean {
@@ -148,15 +326,15 @@ function validateUptimeSubmission(data: UptimeSubmissionData, submitterKey: stri
     currentTime: new Date().toISOString()
   });
 
-  // Check if uptime values are reasonable
-  if (data.uptime < 0 || data.uptime > 31536000) { // Max 1 year in seconds
-    console.log(`❌ Invalid uptime value from ${submitterKey}: ${data.uptime}`);
+  // Check if uptime values are reasonable - must be positive to avoid rewarding rebooted nodes
+  if (typeof data.uptime !== 'number' || data.uptime <= 0 || data.uptime > 31536000) { // Max 1 year in seconds
+    console.log(`❌ Invalid uptime value from ${submitterKey}: ${data.uptime} (must be positive number)`);
     console.log(`🔄 Audit function returning: false for ${submitterKey} (invalid uptime)`);
     return false;
   }
   
-  // Check monthly uptime percentage
-  if (data.monthlyUptime < 0 || data.monthlyUptime > 100) {
+  // Check monthly uptime percentage (if provided)
+  if (data.monthlyUptime !== undefined && (data.monthlyUptime < 0 || data.monthlyUptime > 100)) {
     console.log(`❌ Invalid monthly uptime percentage from ${submitterKey}: ${data.monthlyUptime}`);
     return false;
   }
@@ -206,6 +384,7 @@ function validateUptimeSubmission(data: UptimeSubmissionData, submitterKey: stri
   }
   
   console.log(`✅ Valid uptime submission from ${submitterKey}`);
+  console.log(`🎯 UPTIME AUDIT DECISION: APPROVE - Data passes all validation checks`);
   console.log(`🔄 Audit function returning: true for ${submitterKey}`);
   return true;
 }

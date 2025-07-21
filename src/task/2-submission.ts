@@ -1,4 +1,5 @@
 import { namespaceWrapper } from '@_koii/task-manager/namespace-wrapper';
+import { TaskSubmissionData } from './1-task';
 
 export async function submission(roundNumber: number): Promise<string | void> {
   /**
@@ -15,46 +16,83 @@ export async function submission(roundNumber: number): Promise<string | void> {
       return JSON.stringify({ error: 'Invalid round number', timestamp: Date.now() });
     }
     
-    // Get uptime data for submission
+    // Get new structured task submission data first
+    const taskSubmissionData = await namespaceWrapper.storeGet('taskSubmissionData');
+    
+    if (taskSubmissionData) {
+      try {
+        const parsedTaskData: TaskSubmissionData = JSON.parse(taskSubmissionData);
+        
+        // Create optimized submission for 512-byte limit
+        const optimizedSubmission = createOptimizedSubmission(parsedTaskData);
+        const submissionString = JSON.stringify(optimizedSubmission);
+        
+        if (submissionString.length <= 512) {
+          console.log(`📤 Submitting structured data (${submissionString.length} bytes): ${submissionString}`);
+          return submissionString;
+        } else {
+          console.warn(`⚠️ Structured submission too large (${submissionString.length} bytes), falling back to minimal format`);
+          // Fall through to legacy format
+        }
+      } catch (parseError) {
+        console.error(`❌ Failed to parse task submission data:`, parseError);
+        // Fall through to legacy format
+      }
+    }
+    
+    // Fallback to legacy uptime data format
+    console.log('📤 Using legacy uptime data format as fallback');
     const uptimeData = await namespaceWrapper.storeGet('uptimeData');
     
     if (!uptimeData) {
-      console.error(`❌ No uptime data available for round ${roundNumber}`);
+      console.error(`❌ No submission data available for round ${roundNumber}`);
       // Return a fallback submission instead of failing
       return JSON.stringify({ 
-        error: 'No uptime data', 
+        error: 'No data available', 
         timestamp: Date.now(), 
         date: new Date().toISOString().split('T')[0] 
       });
     }
     
-    // Validate uptime data structure
-    if (typeof uptimeData !== 'object' || uptimeData === null) {
+    // Parse uptime data if it's a string (JSON)
+    let parsedUptimeData;
+    if (typeof uptimeData === 'string') {
+      try {
+        parsedUptimeData = JSON.parse(uptimeData);
+      } catch (parseError) {
+        console.error(`❌ Failed to parse uptime data for round ${roundNumber}:`, parseError);
+        return JSON.stringify({ 
+          error: 'Invalid data format', 
+          timestamp: Date.now(), 
+          date: new Date().toISOString().split('T')[0] 
+        });
+      }
+    } else if (typeof uptimeData === 'object' && uptimeData !== null) {
+      parsedUptimeData = uptimeData;
+    } else {
       console.error(`❌ Invalid uptime data structure for round ${roundNumber}:`, typeof uptimeData);
       return JSON.stringify({ 
-        error: 'Invalid uptime data structure', 
+        error: 'Invalid data structure', 
         timestamp: Date.now(), 
         date: new Date().toISOString().split('T')[0] 
       });
     }
     
     // Ensure the submission is a string and within size limits
-    const submissionData = JSON.stringify(uptimeData);
+    const submissionData = JSON.stringify(parsedUptimeData);
     
     if (submissionData.length > 512) {
       console.error(`❌ Submission too large: ${submissionData.length} bytes (max 512)`);
       // Return a truncated version
-      const uptimeDataTyped = uptimeData as any;
       const truncatedData = {
-        uptime: uptimeDataTyped.uptime || 0,
-        monthlyUptime: uptimeDataTyped.monthlyUptime || 0,
+        uptime: parsedUptimeData.uptime || 0,
         timestamp: Date.now(),
         date: new Date().toISOString().split('T')[0]
       };
       return JSON.stringify(truncatedData);
     }
     
-    console.log(`Submitting uptime data: ${submissionData}`);
+    console.log(`📤 Submitting legacy uptime data: ${submissionData}`);
     return submissionData;
     
   } catch (error) {
@@ -73,4 +111,38 @@ export async function submission(roundNumber: number): Promise<string | void> {
     console.log(`🔄 Returning error submission for round ${roundNumber}: ${errorSubmission}`);
     return errorSubmission;
   }
+}
+
+/**
+ * Create an optimized submission that fits within 512 bytes
+ */
+function createOptimizedSubmission(data: TaskSubmissionData): any {
+  const submission: any = {
+    d: { // dynamic
+      u: data.dynamic.uptime
+    },
+    m: { // metadata
+      sc: data.metadata.staticChanged,
+      t: data.metadata.timestamp,
+      r: data.metadata.roundNumber
+    }
+  };
+  
+  // Only include static data if it changed
+  if (data.static && data.metadata.staticChanged) {
+    submission.s = { // static
+      c: data.static.cpuModel.substring(0, 30), // Truncate CPU model if too long
+      r: data.static.ramSize,
+      d: data.static.ssdType.substring(0, 20), // Truncate disk type if too long
+      o: data.static.osType,
+      a: data.static.nodeArch
+    };
+  }
+  
+  // Include wallet if available and space permits
+  if (data.metadata.nodeWallet && data.metadata.nodeWallet !== 'unknown') {
+    submission.w = data.metadata.nodeWallet.substring(0, 44); // Solana pubkey length
+  }
+  
+  return submission;
 }

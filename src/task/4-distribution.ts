@@ -49,17 +49,38 @@ export const distribution = async (
   console.log(`DAILY EARNING POTENTIAL: ${TOKENS_PER_DAY_PER_NODE} tokens per node per day`);
   console.log(`PENALTY POLICY: Failed submissions get 0 tokens (no stake slashing)`);
   
+  // ENHANCED DEBUG: Log all submitter data to identify vote calculation issues
+  console.log(`🔍 DEBUG: Analyzing ${submitters.length} submitters for round ${roundNumber}`);
+  submitters.forEach((submitter, index) => {
+    console.log(`DEBUG Submitter ${index + 1}:`, {
+      publicKey: submitter.publicKey,
+      votes: submitter.votes,
+      votesType: typeof submitter.votes,
+      // Log any other available properties
+      ...Object.keys(submitter).reduce((acc, key) => {
+        if (key !== 'publicKey' && key !== 'votes') {
+          acc[key] = submitter[key];
+        }
+        return acc;
+      }, {} as any)
+    });
+  });
+  
   const distributionList: DistributionList = {};
   const approvedSubmitters = [];
   const failedSubmitters = [];
   
   // Categorize submitters: approved get rewards, failed get zero (no slashing)
   for (const submitter of submitters) {
+    console.log(`🔍 VOTE CHECK: ${submitter.publicKey} has ${submitter.votes} votes (type: ${typeof submitter.votes})`);
+    
     if (submitter.votes > 0) {
       // Positive votes = approved submission (gets 3 tokens)
+      console.log(`✅ APPROVED: ${submitter.publicKey} with ${submitter.votes} votes - WILL RECEIVE REWARDS`);
       approvedSubmitters.push(submitter.publicKey);
     } else {
       // Zero or negative votes = failed submission (gets 0 tokens, no slashing)
+      console.log(`❌ REJECTED: ${submitter.publicKey} with ${submitter.votes} votes - NO REWARDS`);
       failedSubmitters.push(submitter.publicKey);
       distributionList[submitter.publicKey] = 0;
     }
@@ -68,6 +89,10 @@ export const distribution = async (
   console.log(`APPROVED NODES: ${approvedSubmitters.length}`);
   console.log(`FAILED NODES: ${failedSubmitters.length} (receiving 0 tokens, no stake penalty)`);
   console.log(`MAX NODES PER ROUND: ${MAX_NODES_PER_ROUND}`);
+  
+  // ADDITIONAL DEBUG: Show who specifically is approved/failed
+  console.log(`🎯 APPROVED NODES LIST:`, approvedSubmitters);
+  console.log(`⛔ FAILED NODES LIST:`, failedSubmitters);
   
   if (approvedSubmitters.length === 0) {
     console.log("NO NODES TO REWARD - All submissions failed audit");
