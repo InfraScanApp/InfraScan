@@ -15,8 +15,9 @@ function saveClaimedRounds() {
 
 export async function sendReward(publicKey: string, walletAddress: string, amount: number, round: number): Promise<void> {
   try {
+    // Check for duplicate reward claim
     if (claimedRounds[publicKey]?.includes(round)) {
-      console.log(`⚠️ Round ${round} for ${publicKey} already claimed.`);
+      console.log(`⚠️ Already rewarded ${publicKey} for round ${round}`);
       return;
     }
 
@@ -24,14 +25,15 @@ export async function sendReward(publicKey: string, walletAddress: string, amoun
     // This should integrate with the Koii task framework's reward distribution system
     const txHash = await sendTransaction(walletAddress, amount);
 
-    console.log(`✅ Sent ${amount} tokens to ${walletAddress} (Round ${round}) — TX: ${txHash}`);
+    console.log(`✅ TX ${txHash}: Sent ${amount} KOII to ${walletAddress}`);
 
+    // Mark round as claimed
     if (!claimedRounds[publicKey]) claimedRounds[publicKey] = [];
     claimedRounds[publicKey].push(round);
     saveClaimedRounds();
 
-  } catch (error) {
-    console.error(`❌ Reward send failed for ${publicKey} (Round ${round}):`, error);
+  } catch (error: any) {
+    console.error(`❌ Reward failed for ${walletAddress} (Round ${round}):`, error.message || error);
   }
 }
 

@@ -25,14 +25,21 @@ export async function submission(roundNumber: number): Promise<string | void> {
         
         // Create optimized submission for 512-byte limit
         const optimizedSubmission = createOptimizedSubmission(parsedTaskData);
-        const submissionString = JSON.stringify(optimizedSubmission);
         
-        if (submissionString.length <= 512) {
-          console.log(`📤 Submitting structured data (${submissionString.length} bytes): ${submissionString}`);
-          return submissionString;
-        } else {
-          console.warn(`⚠️ Structured submission too large (${submissionString.length} bytes), falling back to minimal format`);
+        // Validate structured submission before processing
+        if (!optimizedSubmission?.d || !optimizedSubmission?.m || !optimizedSubmission?.w || optimizedSubmission?.error) {
+          console.warn("❌ Submission skipped — invalid or malformed payload");
           // Fall through to legacy format
+        } else {
+          const submissionString = JSON.stringify(optimizedSubmission);
+          
+          if (submissionString.length <= 512) {
+            console.log(`📤 Submitting structured data (${submissionString.length} bytes): ${submissionString}`);
+            return submissionString;
+          } else {
+            console.warn(`⚠️ Structured submission too large (${submissionString.length} bytes), falling back to minimal format`);
+            // Fall through to legacy format
+          }
         }
       } catch (parseError) {
         console.error(`❌ Failed to parse task submission data:`, parseError);
