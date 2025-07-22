@@ -22,11 +22,26 @@
  */
 
 import { Submitter, DistributionList } from "@_koii/task-manager";
+import * as fs from 'fs';
+import * as path from 'path';
 
-// Token decimal places (9 is standard for SPL tokens)
-const TOKEN_DECIMALS = 9;
+// ENHANCED REWARD SYSTEM CONSTANTS
+const MINIMUM_ROUND_FOR_REWARDS = 4;
+const REWARD_PER_NODE = 3;
+const TOKEN_DECIMALS = 1_000_000_000; // 1 billion base units = 1 token
+const REWARD_BASE_UNITS = REWARD_PER_NODE * TOKEN_DECIMALS;
 
-// CORE REWARD PARAMETERS
+// REWARD LOGGING SYSTEM
+interface RewardEntry {
+  nodeId: string;
+  roundTimestamp: number;
+  payout: number;
+  rewardedAt: number;
+}
+
+const REWARD_LOG = path.resolve(__dirname, 'rewards.json');
+
+// LEGACY CONSTANTS (kept for compatibility)
 const TOKENS_PER_ROUND = 3; // 3 tokens per approved node per round
 const MAX_BOUNTY_PER_ROUND = 90; // 90 tokens maximum per round (PRODUCTION - safety limit from config-task.yml)
 
@@ -34,125 +49,108 @@ const MAX_BOUNTY_PER_ROUND = 90; // 90 tokens maximum per round (PRODUCTION - sa
 const MAX_NODES_PER_ROUND = Math.floor(MAX_BOUNTY_PER_ROUND / TOKENS_PER_ROUND); // 30 nodes max (production) - target: 20-30 nodes
 const TOKENS_PER_DAY_PER_NODE = TOKENS_PER_ROUND * 24; // 72 tokens per day per node (24 rounds/day)
 
+// Log reward to JSON file (append without overwrite)
+function logReward(entry: RewardEntry) {
+  let log: RewardEntry[] = [];
+  if (fs.existsSync(REWARD_LOG)) {
+    try {
+      log = JSON.parse(fs.readFileSync(REWARD_LOG, 'utf-8'));
+    } catch (e) {
+      console.warn("⚠️ Failed to read rewards log. Initializing new log.");
+    }
+  }
+  log.push(entry);
+  fs.writeFileSync(REWARD_LOG, JSON.stringify(log, null, 2));
+
+  // Summary log per round
+  const readableTime = new Date(entry.rewardedAt).toLocaleString();
+  console.log(`📥 LOGGED REWARD for node ${entry.nodeId}: ${entry.payout / TOKEN_DECIMALS} tokens at ${readableTime}`);
+}
+
+// Main reward handler
+export function rewardNode(nodeId: string, roundTimestamp: number) {
+  const entry: RewardEntry = {
+    nodeId,
+    roundTimestamp,
+    payout: REWARD_BASE_UNITS,
+    rewardedAt: Date.now(),
+  };
+  logReward(entry);
+
+  // Display total count of rewards earned by this node (optional)
+  try {
+    const rewards = JSON.parse(fs.readFileSync(REWARD_LOG, 'utf-8')) as RewardEntry[];
+    const totalForNode = rewards.filter(r => r.nodeId === nodeId)
+                                .reduce((sum, r) => sum + r.payout, 0);
+    const tokensTotal = totalForNode / TOKEN_DECIMALS;
+    console.log(`🎯 TOTAL REWARDED TO ${nodeId}: ${tokensTotal} tokens`);
+  } catch (err) {
+    console.warn(`⚠️ Could not summarize rewards for ${nodeId}`);
+  }
+
+  return entry;
+}
+
 export const distribution = async (
   submitters: Submitter[],
   bounty: number,
   roundNumber: number
 ): Promise<DistributionList> => {
   /**
-   * Generate the reward list for a given round
-   * Each approved node receives exactly 3 tokens per round
-   * Failed nodes receive 0 tokens (no stake slashing)
+   * Enhanced Distribution System with Warming Period
+   * - Rounds 1-3: No rewards (warming up period)
+   * - Round 4+: 3 tokens per approved node
+   * - Failed nodes receive 0 tokens (no stake slashing)
    */
-  console.log(`MAKE DISTRIBUTION LIST FOR ROUND ${roundNumber}`);
-  console.log(`REWARD STRUCTURE: ${TOKENS_PER_ROUND} tokens per node per round`);
-  console.log(`DAILY EARNING POTENTIAL: ${TOKENS_PER_DAY_PER_NODE} tokens per node per day`);
-  console.log(`PENALTY POLICY: Failed submissions get 0 tokens (no stake slashing)`);
+  console.log(`🚀 MAKE DISTRIBUTION LIST FOR ROUND ${roundNumber}`);
+  console.log(`📋 REWARD STRUCTURE: ${REWARD_PER_NODE} tokens per node per round`);
+  console.log(`⏳ MINIMUM ROUND FOR REWARDS: ${MINIMUM_ROUND_FOR_REWARDS}`);
   
-  // ENHANCED DEBUG: Log all submitter data to identify vote calculation issues
+  // Early return for warming up rounds
+  if (roundNumber < MINIMUM_ROUND_FOR_REWARDS) {
+    console.log(`⏳ Skipping distribution for round ${roundNumber} — warming up`);
+    const emptyDistribution: DistributionList = {};
+    submitters.forEach(submitter => {
+      emptyDistribution[submitter.publicKey] = 0;
+    });
+    return emptyDistribution;
+  }
+
+  // ENHANCED DEBUG: Log all submitter data
   console.log(`🔍 DEBUG: Analyzing ${submitters.length} submitters for round ${roundNumber}`);
   submitters.forEach((submitter, index) => {
     console.log(`DEBUG Submitter ${index + 1}:`, {
       publicKey: submitter.publicKey,
       votes: submitter.votes,
       votesType: typeof submitter.votes,
-      // Log any other available properties
-      ...Object.keys(submitter).reduce((acc, key) => {
-        if (key !== 'publicKey' && key !== 'votes') {
-          acc[key] = (submitter as any)[key];
-        }
-        return acc;
-      }, {} as any)
     });
   });
   
-  const distributionList: DistributionList = {};
-  const approvedSubmitters = [];
-  const failedSubmitters = [];
+  // Build approvedNodes structure for simplified processing
+  const approvedNodes: Record<string, number> = {};
+  submitters.forEach(submitter => {
+    approvedNodes[submitter.publicKey] = submitter.votes;
+  });
   
-  // Categorize submitters: approved get rewards, failed get zero (no slashing)
-  for (const submitter of submitters) {
-    console.log(`🔍 VOTE CHECK: ${submitter.publicKey} has ${submitter.votes} votes (type: ${typeof submitter.votes})`);
-    
-    if (submitter.votes > 0) {
-      // Positive votes = approved submission (gets 3 tokens)
-      console.log(`✅ APPROVED: ${submitter.publicKey} with ${submitter.votes} votes - WILL RECEIVE REWARDS`);
-      approvedSubmitters.push(submitter.publicKey);
+  // Main distribution logic with enhanced logging
+  const distributionList: Record<string, number> = {};
+  let rewardedCount = 0;
+
+  for (const [nodeId, votes] of Object.entries(approvedNodes)) {
+    if (votes > 0) {
+      distributionList[nodeId] = REWARD_BASE_UNITS;
+      rewardedCount++;
+      console.log(`🎁 REWARDED: ${nodeId} with ${REWARD_PER_NODE} tokens for round ${roundNumber}`);
+      // Log reward to JSON file
+      rewardNode(nodeId, Date.now());
     } else {
-      // Zero or negative votes = failed submission (gets 0 tokens, no slashing)
-      console.log(`❌ REJECTED: ${submitter.publicKey} with ${submitter.votes} votes - NO REWARDS`);
-      failedSubmitters.push(submitter.publicKey);
-      distributionList[submitter.publicKey] = 0;
-      
-      // Enhanced logging for rewards tracking
-      console.warn(`🚫 REJECTED: ${submitter.publicKey} — audit failed or insufficient votes`);
+      distributionList[nodeId] = 0;
+      console.log(`❌ REJECTED: ${nodeId} — audit failed or no quorum`);
     }
   }
-  
-  console.log(`APPROVED NODES: ${approvedSubmitters.length}`);
-  console.log(`FAILED NODES: ${failedSubmitters.length} (receiving 0 tokens, no stake penalty)`);
-  console.log(`MAX NODES PER ROUND: ${MAX_NODES_PER_ROUND}`);
-  
-  // ADDITIONAL DEBUG: Show who specifically is approved/failed
-  console.log(`🎯 APPROVED NODES LIST:`, approvedSubmitters);
-  console.log(`⛔ FAILED NODES LIST:`, failedSubmitters);
-  
-  if (approvedSubmitters.length === 0) {
-    console.log("NO NODES TO REWARD - All submissions failed audit");
-    return distributionList;
-  }
-  
-  // Safety check: ensure we don't exceed the maximum number of nodes per round
-  if (approvedSubmitters.length > MAX_NODES_PER_ROUND) {
-    console.warn(`WARNING: Too many approved nodes (${approvedSubmitters.length}) exceeds max nodes per round (${MAX_NODES_PER_ROUND})`);
-    console.warn(`Only the first ${MAX_NODES_PER_ROUND} nodes will be rewarded this round`);
-    
-    // Only reward the first MAX_NODES_PER_ROUND nodes
-    const rewardedNodes = approvedSubmitters.slice(0, MAX_NODES_PER_ROUND);
-    const unrewardedNodes = approvedSubmitters.slice(MAX_NODES_PER_ROUND);
-    
-    // Give exactly 3 tokens to each of the first MAX_NODES_PER_ROUND nodes
-    const rewardPerNode = TOKENS_PER_ROUND * Math.pow(10, TOKEN_DECIMALS); // 3 tokens = 3,000,000,000 base units
-    rewardedNodes.forEach((candidate) => {
-      distributionList[candidate] = rewardPerNode;
-      // Enhanced logging for rewards tracking
-      console.log(`🎁 REWARDED: ${candidate} with ${TOKENS_PER_ROUND} tokens for round ${roundNumber}`);
-    });
-    
-    // Give 0 tokens to the remaining nodes (they won't be penalized, just not rewarded)
-    unrewardedNodes.forEach((candidate) => {
-      distributionList[candidate] = 0;
-      // Enhanced logging for rewards tracking
-      console.warn(`🚫 REJECTED: ${candidate} — exceeded round limit (${MAX_NODES_PER_ROUND} max nodes per round)`);
-    });
-    
-    console.log(`REWARDED NODES: ${rewardedNodes.length} nodes with ${TOKENS_PER_ROUND} tokens each`);
-    console.log(`UNREWARDED NODES: ${unrewardedNodes.length} nodes (exceeded round limit)`);
-    console.log(`TOTAL TOKENS DISTRIBUTED THIS ROUND: ${rewardedNodes.length * TOKENS_PER_ROUND} tokens`);
-    console.log(`TOTAL TOKENS DISTRIBUTED PER DAY: ${rewardedNodes.length * TOKENS_PER_DAY_PER_NODE} tokens`);
-    
-    // Round summary for easy tracking
-    console.log(`📊 ROUND SUMMARY: ${rewardedNodes.length} rewarded / ${unrewardedNodes.length + failedSubmitters.length} rejected`);
-    
-  } else {
-    // Normal case: All approved nodes get exactly 3 tokens each
-    const rewardPerNode = TOKENS_PER_ROUND * Math.pow(10, TOKEN_DECIMALS); // 3 tokens
-    
-    approvedSubmitters.forEach((candidate) => {
-      distributionList[candidate] = rewardPerNode; // Each node gets exactly 3 tokens
-      // Enhanced logging for rewards tracking
-      console.log(`🎁 REWARDED: ${candidate} with ${TOKENS_PER_ROUND} tokens for round ${roundNumber}`);
-    });
-    
-    const totalTokensDistributedThisRound = approvedSubmitters.length * TOKENS_PER_ROUND;
-    
-    console.log(`REWARD PER NODE: ${TOKENS_PER_ROUND} tokens (${rewardPerNode} base units)`);
-    console.log(`TOTAL TOKENS DISTRIBUTED THIS ROUND: ${totalTokensDistributedThisRound} tokens`);
-    console.log(`TOTAL TOKENS DISTRIBUTED PER DAY: ${approvedSubmitters.length * TOKENS_PER_DAY_PER_NODE} tokens`);
-    
-    // Round summary for easy tracking
-    console.log(`📊 ROUND SUMMARY: ${approvedSubmitters.length} rewarded / ${failedSubmitters.length} rejected`);
-  }
+
+  console.log(`📊 ROUND ${roundNumber} SUMMARY: ${rewardedCount} rewarded, ${Object.keys(approvedNodes).length - rewardedCount} rejected`);
+  console.table(distributionList);
   
   return distributionList;
 }
