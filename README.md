@@ -59,3 +59,5 @@ We won't spoil what's coming, but here's a glimpse:
 **InfraScan is how it sees itself.**
 
 **Stay connected. Stay ahead.**
+
+> ℹ️ **Note:** This task includes a 3-round warm-up period. Rewards begin from round 4 onward, enforced in `4-distribution.ts`.
