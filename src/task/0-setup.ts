@@ -1,6 +1,6 @@
 import { UptimeTracker } from './uptime-tracker';
 
-export async function setup(): Promise<void> {
+export const setup = async () => {
   // define any steps that must be executed before the task starts
   console.log("CUSTOM SETUP");
   
@@ -12,4 +12,6 @@ export async function setup(): Promise<void> {
   } catch (error) {
     console.error("Failed to initialize uptime tracker:", error);
   }
-}
+
+  console.log('🛠️ Task setup complete. Delayed audit/reward will activate per round.');
+};

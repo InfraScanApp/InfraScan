@@ -1,6 +1,47 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+// Store claimed rounds
+let claimedRoundsPath = path.join(__dirname, '../../claimed-rounds.json');
+let claimedRounds: Record<string, any> = {};
+
+if (fs.existsSync(claimedRoundsPath)) {
+  claimedRounds = JSON.parse(fs.readFileSync(claimedRoundsPath, 'utf-8'));
+}
+
+function saveClaimedRounds() {
+  fs.writeFileSync(claimedRoundsPath, JSON.stringify(claimedRounds, null, 2));
+}
+
+export async function sendReward(publicKey: string, walletAddress: string, amount: number, round: number): Promise<void> {
+  try {
+    if (claimedRounds[publicKey]?.includes(round)) {
+      console.log(`⚠️ Round ${round} for ${publicKey} already claimed.`);
+      return;
+    }
+
+    // TODO: Replace this with actual Koii token transfer implementation
+    // This should integrate with the Koii task framework's reward distribution system
+    const txHash = await sendTransaction(walletAddress, amount);
+
+    console.log(`✅ Sent ${amount} tokens to ${walletAddress} (Round ${round}) — TX: ${txHash}`);
+
+    if (!claimedRounds[publicKey]) claimedRounds[publicKey] = [];
+    claimedRounds[publicKey].push(round);
+    saveClaimedRounds();
+
+  } catch (error) {
+    console.error(`❌ Reward send failed for ${publicKey} (Round ${round}):`, error);
+  }
+}
+
+// TODO: Implement actual token transfer function
+async function sendTransaction(walletAddress: string, amount: number): Promise<string> {
+  // This is a placeholder - needs to be replaced with actual Koii/Solana token transfer logic
+  // Should integrate with the namespaceWrapper or Koii task framework
+  throw new Error('sendTransaction not implemented - integrate with Koii task reward system');
+}
+
 // Token decimal places (9 is standard for SPL tokens)
 const TOKEN_DECIMALS = 9;
 const TOKENS_PER_ROUND = 3; // 3 tokens per approved node per round

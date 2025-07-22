@@ -6,6 +6,8 @@
  * NOTE: You may see "SUBMIT AUDIT TRIGGER undefined" messages in logs.
  * This is a cosmetic framework-level logging issue that doesn't affect
  * the actual audit process or rewards. The audit logic below works correctly.
+ * 
+ * Note: Warm-up check occurs in 4-distribution.ts, not here
  */
 
 interface UptimeSubmissionData {
@@ -98,6 +100,13 @@ export async function audit(
     // Try to parse as JSON first (for structured data)
     try {
       const submissionData = JSON.parse(submission);
+      const submission_value = submissionData; // For compatibility with audit handler pattern
+      
+      // Validate submission format before processing
+      if (!isValidSubmission(submission_value)) {
+        console.warn(`❌ REJECTED: ${submitterKey} — Invalid submission format`);
+        return false;
+      }
       
       // Check for new optimized submission format
       if (isOptimizedSubmission(submissionData)) {
@@ -228,6 +237,15 @@ function isHardwareSubmission(data: any): data is HardwareSubmissionData {
     typeof data.timestamp === 'number' &&
     typeof data.date === 'string'
   );
+}
+
+/**
+ * Validate basic submission structure
+ */
+function isValidSubmission(submission: any): boolean {
+  if (!submission || typeof submission !== 'object') return false;
+  if (submission.error || !submission.d || !submission.m || !submission.w) return false;
+  return true;
 }
 
 /**
@@ -651,3 +669,25 @@ function validateStringSubmission(submission: string, submitterKey: string): boo
   console.log(`Unknown string submission from ${submitterKey}: ${submission}`);
   return false;
 }
+
+/**
+ * Delayed audit payload coordinator
+ * Waits 5 minutes after round start to allow all submissions to arrive
+ */
+export const auditPayload = async (data: any) => {
+  const round = data.round;
+
+  // Delay audit by 5 minutes to let all submissions arrive
+  setTimeout(async () => {
+    console.log(`🕐 Delayed audit started for round ${round}`);
+
+    // Your actual audit logic goes here...
+    // Example: const result = await validateSubmissions(round);
+    
+    // TODO: Implement round-wide audit coordination
+    // This should collect all submissions for the round and process them
+    console.log(`⚠️ auditPayload implementation needed - currently delegating to individual audit() calls`);
+
+    console.log(`✅ Audit completed for round ${round}`);
+  }, 5 * 60 * 1000); // 5-minute buffer
+};
