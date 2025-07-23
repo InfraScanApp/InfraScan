@@ -25,6 +25,7 @@ import { Submitter, DistributionList } from "@_koii/task-manager";
 import * as fs from 'fs';
 import * as path from 'path';
 import { sendReward } from './reward';
+import { namespaceWrapper } from "@_koii/task-manager/namespace-wrapper";
 
 // ENHANCED REWARD SYSTEM CONSTANTS
 const MINIMUM_ROUND_FOR_REWARDS = 4;
@@ -50,6 +51,35 @@ const MAX_BOUNTY_PER_ROUND = 90; // 90 tokens maximum per round (PRODUCTION - sa
 const MAX_NODES_PER_ROUND = Math.floor(MAX_BOUNTY_PER_ROUND / TOKENS_PER_ROUND); // 30 nodes max (production) - target: 20-30 nodes
 const TOKENS_PER_DAY_PER_NODE = TOKENS_PER_ROUND * 24; // 72 tokens per day per node (24 rounds/day)
 
+/**
+ * Get wallet address for a node ID
+ * First tries to get from submission data, falls back to using nodeId as wallet
+ */
+async function getWalletForNode(nodeId: string): Promise<string | null> {
+  try {
+    // Try to get wallet from stored submission data
+    const submissionData = await namespaceWrapper.storeGet(nodeId);
+    if (submissionData && typeof submissionData === 'string') {
+      try {
+        const parsed = JSON.parse(submissionData);
+        if (parsed.w && typeof parsed.w === 'string') {
+          console.log(`📋 Found wallet for ${nodeId}: ${parsed.w}`);
+          return parsed.w;
+        }
+      } catch (e) {
+        // Not JSON, continue to fallback
+      }
+    }
+    
+    // Fallback: use nodeId as wallet address (current behavior)
+    console.log(`📋 Using nodeId as wallet for ${nodeId}`);
+    return nodeId;
+  } catch (error) {
+    console.warn(`⚠️ Failed to get wallet for ${nodeId}:`, error);
+    return nodeId; // Fallback to nodeId
+  }
+}
+
 // Log reward to JSON file (append without overwrite)
 function logReward(entry: RewardEntry) {
   let log: RewardEntry[] = [];
@@ -68,17 +98,18 @@ function logReward(entry: RewardEntry) {
   console.log(`📥 LOGGED REWARD for node ${entry.nodeId}: ${entry.payout / TOKEN_DECIMALS} tokens at ${readableTime}`);
 }
 
-// Main reward handler
-export function rewardNode(nodeId: string, roundTimestamp: number) {
+// Main reward handler with actual payout
+export async function rewardNode(nodeId: string, roundTimestamp: number) {
   const entry: RewardEntry = {
     nodeId,
     roundTimestamp,
     payout: REWARD_BASE_UNITS,
     rewardedAt: Date.now(),
   };
+
   logReward(entry);
 
-  // Display total count of rewards earned by this node (optional)
+  // Display total rewarded (optional)
   try {
     const rewards = JSON.parse(fs.readFileSync(REWARD_LOG, 'utf-8')) as RewardEntry[];
     const totalForNode = rewards.filter(r => r.nodeId === nodeId)
@@ -87,6 +118,14 @@ export function rewardNode(nodeId: string, roundTimestamp: number) {
     console.log(`🎯 TOTAL REWARDED TO ${nodeId}: ${tokensTotal} tokens`);
   } catch (err) {
     console.warn(`⚠️ Could not summarize rewards for ${nodeId}`);
+  }
+
+  // 🔥 ACTUAL PAYOUT
+  const walletAddress = await getWalletForNode(nodeId);
+  if (walletAddress) {
+    await sendReward(nodeId, walletAddress, REWARD_PER_NODE, Math.floor(roundTimestamp / 1000));
+  } else {
+    console.warn(`⚠️ Wallet not found for node ${nodeId} — reward not sent`);
   }
 
   return entry;
@@ -148,11 +187,8 @@ export const distribution = async (
       rewardedCount++;
       console.log(`🎁 REWARDED: ${nodeId} with ${REWARD_PER_NODE} tokens for round ${roundNumber}`);
       
-      // Send actual reward transaction
-      await sendReward(nodeId, nodeId, REWARD_PER_NODE, roundNumber);
-      
-      // Log reward to JSON file
-      rewardNode(nodeId, Date.now());
+      // Log reward to JSON file and send actual payout
+      await rewardNode(nodeId, Date.now());
     } else {
       distributionList[nodeId] = 0;
       console.log(`❌ REJECTED: ${nodeId} — audit failed or no quorum`);

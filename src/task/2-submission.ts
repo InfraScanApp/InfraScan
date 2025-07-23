@@ -35,6 +35,10 @@ export async function submission(roundNumber: number): Promise<string | void> {
           
           if (submissionString.length <= 512) {
             console.log(`📤 Submitting structured data (${submissionString.length} bytes): ${submissionString}`);
+            const submitterId = await namespaceWrapper.getMainAccountPubkey();
+            if (submitterId) {
+              await namespaceWrapper.storeSet(submitterId, submissionString); // ✅ required for rewards
+            }
             return submissionString;
           } else {
             console.warn(`⚠️ Structured submission too large (${submissionString.length} bytes), falling back to minimal format`);

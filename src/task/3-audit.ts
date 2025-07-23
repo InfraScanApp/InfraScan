@@ -1,3 +1,5 @@
+// Reward logic moved to distribution phase only
+
 /**
  * Audit function for InfraScan task
  * Phase 1: Uptime tracking validation
@@ -114,9 +116,9 @@ export async function audit(
         console.log(`🎯 FINAL AUDIT DECISION: ${result ? 'APPROVE' : 'REJECT'} for ${submitterKey} (optimized format)`);
         console.log(`🔄 Main audit function returning: ${result} for ${submitterKey} (optimized format)`);
         
-        // Enhanced logging for rewards tracking
+        // Enhanced logging for audit results
         if (result) {
-          console.log(`✅ AUDIT PASSED: ${submitterKey}`);
+          console.log(`✅ AUDIT PASSED: ${submitterKey} — Submission approved for distribution phase`);
         } else {
           console.warn(`❌ AUDIT REJECTED: ${submitterKey}`);
         }
@@ -130,9 +132,9 @@ export async function audit(
         console.log(`🎯 FINAL AUDIT DECISION: ${result ? 'APPROVE' : 'REJECT'} for ${submitterKey} (legacy uptime)`);
         console.log(`🔄 Main audit function returning: ${result} for ${submitterKey} (legacy uptime)`);
         
-        // Enhanced logging for rewards tracking
+        // Enhanced logging for audit results
         if (result) {
-          console.log(`✅ AUDIT PASSED: ${submitterKey}`);
+          console.log(`✅ AUDIT PASSED: ${submitterKey} — Submission approved for distribution phase`);
         } else {
           console.warn(`❌ AUDIT REJECTED: ${submitterKey}`);
         }
@@ -146,9 +148,9 @@ export async function audit(
         console.log(`🎯 FINAL AUDIT DECISION: ${result ? 'APPROVE' : 'REJECT'} for ${submitterKey} (hardware)`);
         console.log(`🔄 Main audit function returning: ${result} for ${submitterKey} (hardware)`);
         
-        // Enhanced logging for rewards tracking
+        // Enhanced logging for audit results
         if (result) {
-          console.log(`✅ AUDIT PASSED: ${submitterKey}`);
+          console.log(`✅ AUDIT PASSED: ${submitterKey} — Submission approved for distribution phase`);
         } else {
           console.warn(`❌ AUDIT REJECTED: ${submitterKey}`);
         }
@@ -176,9 +178,9 @@ export async function audit(
         console.log(`🎯 FINAL AUDIT DECISION: ${result ? 'APPROVE' : 'REJECT'} for ${submitterKey} (string validation)`);
         console.log(`🔄 Main audit function returning: ${result} for ${submitterKey} (string validation)`);
         
-        // Enhanced logging for rewards tracking
+        // Enhanced logging for audit results
         if (result) {
-          console.log(`✅ AUDIT PASSED: ${submitterKey}`);
+          console.log(`✅ AUDIT PASSED: ${submitterKey} — Submission approved for distribution phase`);
         } else {
           console.warn(`❌ AUDIT REJECTED: ${submitterKey}`);
         }
