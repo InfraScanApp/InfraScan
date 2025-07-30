@@ -9,4 +9,4 @@ const envKeywords = process.env.TEST_KEYWORDS ?? "";
 
 export const TEST_KEYWORDS = envKeywords
   ? envKeywords.split(",")
-  : ["TEST", "EZ TESTING"];
+  : ["PRODUCTION", "INFRASCAN"];

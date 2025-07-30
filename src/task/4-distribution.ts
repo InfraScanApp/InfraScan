@@ -5,7 +5,7 @@
  * - 3 tokens per approved node per round (DYNAMIC - scales with node count)
  * - 24 rounds per day (1 hour per round)
  * - 72 tokens per day per approved node (3 × 24 = 72)
- * - Safety limit: Maximum 90 tokens per round (PRODUCTION - supports up to 30 nodes)
+ * - Safety limit: Maximum 4000 tokens per round (PRODUCTION - supports up to ~1333 nodes)
  * 
  * PENALTY STRUCTURE:
  * - Failed submissions receive 0 tokens (no stake slashing)
@@ -13,10 +13,11 @@
  * 
  * DYNAMIC SCALING EXAMPLES (PRODUCTION MODE):
  * - 1 node approved = 3 tokens distributed per round = 72 tokens/day
- * - 10 nodes approved = 30 tokens distributed per round = 720 tokens/day
- * - 20 nodes approved = 60 tokens distributed per round = 1,440 tokens/day
- * - 30 nodes approved = 90 tokens distributed per round = 2,160 tokens/day (maximum)
- * - 35 nodes approved = 90 tokens distributed (30 rewarded + 5 unrewarded)
+ * - 100 nodes approved = 300 tokens distributed per round = 7,200 tokens/day
+ * - 500 nodes approved = 1,500 tokens distributed per round = 36,000 tokens/day
+ * - 1000 nodes approved = 3,000 tokens distributed per round = 72,000 tokens/day
+ * - 1333 nodes approved = 4,000 tokens distributed per round = 96,000 tokens/day (maximum)
+ * - System automatically scales based on approved nodes up to 4,000 token limit
  * 
  * NO MANUAL ADJUSTMENT NEEDED - System scales automatically!
  */
@@ -46,12 +47,12 @@ interface RewardEntry {
 
 const REWARD_LOG = path.resolve(__dirname, 'rewards.json');
 
-// LEGACY CONSTANTS (kept for compatibility)
+// PRODUCTION CONSTANTS (flexible bounty approach)
 const TOKENS_PER_ROUND = 3; // 3 tokens per approved node per round
-const MAX_BOUNTY_PER_ROUND = 90; // 90 tokens maximum per round (PRODUCTION - safety limit from config-task.yml)
+const MAX_BOUNTY_PER_ROUND = 4000; // 4000 tokens maximum per round (PRODUCTION - safety limit from config-task.yml)
 
-// CALCULATED LIMITS
-const MAX_NODES_PER_ROUND = Math.floor(MAX_BOUNTY_PER_ROUND / TOKENS_PER_ROUND); // 30 nodes max (production) - target: 20-30 nodes
+// CALCULATED LIMITS (dynamic based on token limit)
+const MAX_NODES_PER_ROUND = Math.floor(MAX_BOUNTY_PER_ROUND / TOKENS_PER_ROUND); // Dynamic calculation based on 4,000 token limit
 const TOKENS_PER_DAY_PER_NODE = TOKENS_PER_ROUND * 24; // 72 tokens per day per node (24 rounds/day)
 
 /**

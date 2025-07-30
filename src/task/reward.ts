@@ -84,7 +84,9 @@ export function getTaskRewardInfo() {
     roundsPerDay: 24,
     description: "3 tokens per successful node per round",
     dynamic: true,
-    testing: true
+    production: true,
+    maxNodesSupported: Math.floor(4000 / 3), // Dynamic calculation: ~1333 nodes
+    maxTokensPerRound: 4000
   };
 }
 

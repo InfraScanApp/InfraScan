@@ -23,13 +23,15 @@ task_audit_program: 'dist/main.js'
 # 57 minutes = 3420 seconds ÷ 0.408s = 8382.353 slots
 round_time: 8382.353
 
-# Audit window: (Required) The audit window should be greater than 1/3 of the round time. Now set to 35% of round time.
-# OPTIMIZED: Increased from 18 to 20 minutes for better global node support
-audit_window: 2933.823      # ~20 minutes (8382.353 × 0.35) - More time for global nodes
+# Audit window: (Required) The audit window should be greater than 1/3 of the round time. 
+# OPTIMIZED: Increased to 40% for better audit and distribution processing
+# 40% of round time = 3352.941 slots ≈ 23 minutes
+audit_window: 3352.941      # ~23 minutes (8382.353 × 0.40) - Adequate time for audit + distribution
 
-# Submission window: (Required) The submission window should be greater than 1/3 of the round time. Now set to 50% of round time.
-# OPTIMIZED: Increased from 20 to 28.9 minutes for better reliability
-submission_window: 4191.176  # ~28.9 minutes (8382.353 × 0.5) - More time for network delays
+# Submission window: (Required) The submission window should be greater than 1/3 of the round time. 
+# OPTIMIZED: Reduced to 45% to provide more buffer time
+# 45% of round time = 3772.059 slots ≈ 26 minutes
+submission_window: 3772.059  # ~26 minutes (8382.353 × 0.45) - Sufficient time for global submissions
 
 # Minimum stake amount: (Required) The minimum amount of ISCAN that a user must stake in order to participate in the task.
 minimum_stake_amount: 1
@@ -41,12 +43,12 @@ task_type: 'KPL'
 token_type: "DSWQ7twRXgv6p3rbpECpXuPRKFR884zvDAebS8uNKG4z"
 
 # Total bounty amount:  (Required) The total bounty amount that will be distributed to the task. (Not accepted in case of update task).
-total_bounty_amount: 25920  # PRODUCTION: 30 days with 30 nodes (2,160 tokens/day × 12 days = 25,920)
+total_bounty_amount: 1000000  # PRODUCTION: Initial bounty - will be monitored and topped up as needed
 
 # Bounty amount per round: (Required) Maximum distribution per round (safety limit only)
 # Actual distribution is dynamic: 3 tokens × number of approved nodes
 # This value prevents runaway costs if too many nodes join suddenly
-bounty_amount_per_round: 90  # PRODUCTION: Safety limit for 30 nodes max (90 ÷ 3 = 30 nodes)
+bounty_amount_per_round: 4000  # PRODUCTION: Safety limit for 1333 nodes max (4000 ÷ 3 = 1333 nodes)
 
 # Allowed failed distributions: (Required) Number of times re-submission is allowed for the distribution list in case of an audit, it is also the rounds of submission it will keep. 
 allowed_failed_distributions: 3
@@ -65,7 +67,7 @@ environment: "PRODUCTION"
 
 #################################### BELOW IS FOR UPDATE TASK ONLY ####################################
 # Old Task ID: (ONLY for task update) 
-task_id: '5GagwPbHCM5gfcfgTUjNTgYV23XDppWmejYXsppmvgV2'
+task_id: 'DXuh3sczY3Vjh895C1Pxauc3sz5PbEoi2TFaJoNda5h8'
 
 # Migration Description: (ONLY for task update)
-migrationDescription: 'Revised Audit and Submission timing to improve reliability and global node support'
+migrationDescription: 'FLEXIBLE BOUNTY: Updated to 1M initial bounty with 4000 tokens per round limit. Total bounty will be monitored and topped up as needed for community growth.'
