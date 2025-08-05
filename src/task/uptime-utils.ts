@@ -42,7 +42,7 @@ export class UptimeUtils {
     try {
       const stats = await this.uptimeTracker.calculateUptimeStats();
       const records = await this.uptimeTracker.getUptimeRecords();
-      const currentUptime = this.uptimeTracker.getCurrentUptimeSeconds();
+      const currentUptime = await this.uptimeTracker.getCurrentUptimeSeconds();
 
       // Calculate average monthly uptime
       const monthlyPercentages = Object.values(stats.monthly).map(m => m.percentage);
@@ -85,7 +85,7 @@ export class UptimeUtils {
         exportTimestamp: Date.now(),
         exportDate: new Date().toISOString(),
         totalRecords: records.length,
-        currentUptime: this.uptimeTracker.getCurrentUptimeSeconds(),
+        currentUptime: await this.uptimeTracker.getCurrentUptimeSeconds(),
         records: records.map(record => ({
           timestamp: record.timestamp,
           date: record.date,
@@ -114,6 +114,46 @@ export class UptimeUtils {
   }
 
   /**
+   * Upload data to web database
+   */
+  public async uploadDataToWebDB(webDBUrl: string, apiKey?: string): Promise<boolean> {
+    try {
+      const uptimeData = await this.exportUptimeDataForWebDB();
+      
+      const uploadData = {
+        nodeId: process.env.NODE_ID || 'unknown',
+        uploadTimestamp: Date.now(),
+        uploadDate: new Date().toISOString(),
+        uptimeData: JSON.parse(uptimeData)
+      };
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json'
+      };
+
+      if (apiKey) {
+        headers['Authorization'] = `Bearer ${apiKey}`;
+      }
+
+      const response = await fetch(webDBUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(uploadData)
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      console.log('UptimeUtils: Successfully uploaded data to web database');
+      return true;
+    } catch (error) {
+      console.error('UptimeUtils: Failed to upload data to web database:', error);
+      return false;
+    }
+  }
+
+  /**
    * Check if node meets 95% uptime requirement for the current month
    */
   public async checkMonthlyEligibility(): Promise<boolean> {
@@ -134,7 +174,7 @@ export class UptimeUtils {
    */
   public async getUptimeSummary(): Promise<string> {
     try {
-      const currentUptime = this.uptimeTracker.getCurrentUptimeSeconds();
+      const currentUptime = await this.uptimeTracker.getCurrentUptimeSeconds();
       const stats = await this.uptimeTracker.calculateUptimeStats();
       const isEligible = await this.checkMonthlyEligibility();
       
@@ -203,7 +243,7 @@ export class UptimeUtils {
       const stats = await this.uptimeTracker.calculateUptimeStats();
       const currentMonth = new Date().getFullYear() + '-' + (new Date().getMonth() + 1).toString().padStart(2, '0');
       const monthlyUptime = stats.monthly[currentMonth]?.percentage || 0;
-      const totalUptime = this.uptimeTracker.getCurrentUptimeSeconds();
+      const totalUptime = await this.uptimeTracker.getCurrentUptimeSeconds();
       
       return [{
         nodeId: process.env.NODE_ID || 'current-node',

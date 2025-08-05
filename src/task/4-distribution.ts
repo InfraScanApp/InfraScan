@@ -20,120 +20,17 @@
  * - System automatically scales based on approved nodes up to 4,000 token limit
  * 
  * NO MANUAL ADJUSTMENT NEEDED - System scales automatically!
+ * 
+ * IMPROVED: Now properly integrated with Koii task framework reward system
  */
 
 import { Submitter, DistributionList } from "@_koii/task-manager";
-import * as fs from 'fs';
-import * as path from 'path';
-import { sendReward } from './reward';
 import { namespaceWrapper } from "@_koii/task-manager/namespace-wrapper";
 
-// ENHANCED REWARD SYSTEM CONSTANTS
-const MINIMUM_ROUND_FOR_REWARDS = 4;
+// CORE REQUIREMENT: Fixed 3 tokens per approved node per round
 const REWARD_PER_NODE = 3;
 const TOKEN_DECIMALS = 1_000_000_000; // 1 billion base units = 1 token
 const REWARD_BASE_UNITS = REWARD_PER_NODE * TOKEN_DECIMALS;
-
-// DUPLICATE PREVENTION SYSTEM
-const processedRounds = new Set<number>();
-
-// REWARD LOGGING SYSTEM
-interface RewardEntry {
-  nodeId: string;
-  roundTimestamp: number;
-  payout: number;
-  rewardedAt: number;
-}
-
-const REWARD_LOG = path.resolve(__dirname, 'rewards.json');
-
-// PRODUCTION CONSTANTS (flexible bounty approach)
-const TOKENS_PER_ROUND = 3; // 3 tokens per approved node per round
-const MAX_BOUNTY_PER_ROUND = 4000; // 4000 tokens maximum per round (PRODUCTION - safety limit from config-task.yml)
-
-// CALCULATED LIMITS (dynamic based on token limit)
-const MAX_NODES_PER_ROUND = Math.floor(MAX_BOUNTY_PER_ROUND / TOKENS_PER_ROUND); // Dynamic calculation based on 4,000 token limit
-const TOKENS_PER_DAY_PER_NODE = TOKENS_PER_ROUND * 24; // 72 tokens per day per node (24 rounds/day)
-
-/**
- * Get wallet address for a node ID
- * First tries to get from submission data, falls back to using nodeId as wallet
- */
-async function getWalletForNode(nodeId: string): Promise<string | null> {
-  try {
-    // Try to get wallet from stored submission data
-    const submissionData = await namespaceWrapper.storeGet(nodeId);
-    if (submissionData && typeof submissionData === 'string') {
-      try {
-        const parsed = JSON.parse(submissionData);
-        if (parsed.w && typeof parsed.w === 'string') {
-          console.log(`📋 Found wallet for ${nodeId}: ${parsed.w}`);
-          return parsed.w;
-        }
-      } catch (e) {
-        // Not JSON, continue to fallback
-      }
-    }
-    
-    // Fallback: use nodeId as wallet address (current behavior)
-    console.log(`📋 Using nodeId as wallet for ${nodeId}`);
-    return nodeId;
-  } catch (error) {
-    console.warn(`⚠️ Failed to get wallet for ${nodeId}:`, error);
-    return nodeId; // Fallback to nodeId
-  }
-}
-
-// Log reward to JSON file (append without overwrite)
-function logReward(entry: RewardEntry) {
-  let log: RewardEntry[] = [];
-  if (fs.existsSync(REWARD_LOG)) {
-    try {
-      log = JSON.parse(fs.readFileSync(REWARD_LOG, 'utf-8'));
-    } catch (e) {
-      console.warn("⚠️ Failed to read rewards log. Initializing new log.");
-    }
-  }
-  log.push(entry);
-  fs.writeFileSync(REWARD_LOG, JSON.stringify(log, null, 2));
-
-  // Summary log per round
-  const readableTime = new Date(entry.rewardedAt).toLocaleString();
-  console.log(`📥 LOGGED REWARD for node ${entry.nodeId}: ${entry.payout / TOKEN_DECIMALS} tokens at ${readableTime}`);
-}
-
-// Main reward handler with actual payout
-export async function rewardNode(nodeId: string, roundTimestamp: number) {
-  const entry: RewardEntry = {
-    nodeId,
-    roundTimestamp,
-    payout: REWARD_BASE_UNITS,
-    rewardedAt: Date.now(),
-  };
-
-  logReward(entry);
-
-  // Display total rewarded (optional)
-  try {
-    const rewards = JSON.parse(fs.readFileSync(REWARD_LOG, 'utf-8')) as RewardEntry[];
-    const totalForNode = rewards.filter(r => r.nodeId === nodeId)
-                                .reduce((sum, r) => sum + r.payout, 0);
-    const tokensTotal = totalForNode / TOKEN_DECIMALS;
-    console.log(`🎯 TOTAL REWARDED TO ${nodeId}: ${tokensTotal} tokens`);
-  } catch (err) {
-    console.warn(`⚠️ Could not summarize rewards for ${nodeId}`);
-  }
-
-  // 🔥 ACTUAL PAYOUT
-  const walletAddress = await getWalletForNode(nodeId);
-  if (walletAddress) {
-    await sendReward(nodeId, walletAddress, REWARD_PER_NODE, Math.floor(roundTimestamp / 1000));
-  } else {
-    console.warn(`⚠️ Wallet not found for node ${nodeId} — reward not sent`);
-  }
-
-  return entry;
-}
 
 export const distribution = async (
   submitters: Submitter[],
@@ -141,131 +38,182 @@ export const distribution = async (
   roundNumber: number
 ): Promise<DistributionList> => {
   /**
-   * Enhanced Distribution System with Warming Period
-   * - Rounds 1-3: No rewards (warming up period)
-   * - Round 4+: 3 tokens per approved node
-   * - Failed nodes receive 0 tokens (no stake slashing)
+   * IMPROVED: Distribution with proper Koii framework integration
+   * The framework will handle actual token transfers when this distribution list is submitted
    */
-  console.log(`🚀 MAKE DISTRIBUTION LIST FOR ROUND ${roundNumber}`);
-  console.log(`📋 REWARD STRUCTURE: ${REWARD_PER_NODE} tokens per node per round`);
-  console.log(`⏳ MINIMUM ROUND FOR REWARDS: ${MINIMUM_ROUND_FOR_REWARDS}`);
+  console.log(`🚀 IMPROVED REWARD DISTRIBUTION FOR ROUND ${roundNumber}`);
+  console.log(`💰 Bounty amount: ${bounty}`);
+  console.log(`👥 Number of submitters: ${submitters.length}`);
+  console.log(`🎯 CORE REQUIREMENT: ${REWARD_PER_NODE} tokens per approved node`);
+  console.log(`🔗 KOII FRAMEWORK: Distribution list will trigger automatic token transfers`);
   
-  // PREVENT DUPLICATE PROCESSING
-  if (processedRounds.has(roundNumber)) {
-    console.log(`⚠️ Round ${roundNumber} already processed, skipping duplicate distribution`);
-    const emptyDistribution: DistributionList = {};
+  const distributionList: DistributionList = {};
+  const approvedSubmitters = submitters.filter(submitter => submitter.votes > 0);
+  
+  if (approvedSubmitters.length === 0) {
+    console.log(`❌ No approved submitters for round ${roundNumber}`);
     submitters.forEach(submitter => {
-      emptyDistribution[submitter.publicKey] = 0;
+      distributionList[submitter.publicKey] = 0;
     });
-    return emptyDistribution;
+    return distributionList;
   }
   
-  // Mark round as processed
-  processedRounds.add(roundNumber);
-  console.log(`✅ Round ${roundNumber} marked as processed`);
-  
-  // Early return for warming up rounds
-  if (roundNumber < MINIMUM_ROUND_FOR_REWARDS) {
-    console.log(`⏳ Skipping distribution for round ${roundNumber} — warming up`);
-    const emptyDistribution: DistributionList = {};
-    submitters.forEach(submitter => {
-      emptyDistribution[submitter.publicKey] = 0;
-    });
-    return emptyDistribution;
-  }
-
-  // AUDIT INSIGHTS: Log submission and voting summary
-  const validVotes = submitters.filter(submitter => submitter.votes > 0).length;
-  console.log(`🔎 Audit round ${roundNumber}: Received ${submitters.length} submissions`);
-  console.log(`🗳️ Audit quorum met: ${validVotes}/${submitters.length}`);
-
-  // ENHANCED DEBUG: Log all submitter data
-  console.log(`🔍 DEBUG: Analyzing ${submitters.length} submitters for round ${roundNumber}`);
-  submitters.forEach((submitter, index) => {
-    console.log(`DEBUG Submitter ${index + 1}:`, {
-      publicKey: submitter.publicKey,
-      votes: submitter.votes,
-      votesType: typeof submitter.votes,
-    });
-  });
-  
-  // Build approvedNodes structure for simplified processing
-  const approvedNodes: Record<string, number> = {};
+  // CORE REQUIREMENT: Exactly 3 tokens per approved node
   submitters.forEach(submitter => {
-    approvedNodes[submitter.publicKey] = submitter.votes;
+    if (submitter.votes > 0) {
+      distributionList[submitter.publicKey] = REWARD_BASE_UNITS;
+      console.log(`✅ REWARDED: ${submitter.publicKey} with ${REWARD_PER_NODE} tokens (framework will transfer)`);
+    } else {
+      distributionList[submitter.publicKey] = 0;
+      console.log(`❌ REJECTED: ${submitter.publicKey} (no votes)`);
+    }
   });
   
-  // Main distribution logic with enhanced logging
-  const distributionList: Record<string, number> = {};
-  let rewardedCount = 0;
-
-  for (const [nodeId, votes] of Object.entries(approvedNodes)) {
-    if (votes > 0) {
-      distributionList[nodeId] = REWARD_BASE_UNITS;
-      rewardedCount++;
-      console.log(`🎁 REWARDED: ${nodeId} with ${REWARD_PER_NODE} tokens for round ${roundNumber}`);
-      
-      // Log reward to JSON file and send actual payout
-      try {
-        await rewardNode(nodeId, Date.now());
-        console.log(`✅ PAYOUT EXECUTED: ${nodeId} for round ${roundNumber}`);
-      } catch (payoutError) {
-        console.error(`❌ PAYOUT FAILED: ${nodeId} for round ${roundNumber}:`, payoutError);
-        // Continue with other nodes even if one fails
-      }
-    } else {
-      distributionList[nodeId] = 0;
-      console.log(`❌ REJECTED: ${nodeId} — audit failed or no quorum`);
-    }
-  }
-
-  console.log(`📊 ROUND ${roundNumber} SUMMARY: ${rewardedCount} rewarded, ${Object.keys(approvedNodes).length - rewardedCount} rejected`);
-  console.table(distributionList);
+  const totalTokensDistributed = approvedSubmitters.length * REWARD_PER_NODE;
+  console.log(`📊 ROUND ${roundNumber} SUMMARY: ${approvedSubmitters.length} rewarded, ${submitters.length - approvedSubmitters.length} rejected`);
+  console.log(`💰 TOTAL TOKENS DISTRIBUTED: ${totalTokensDistributed} tokens (${approvedSubmitters.length} nodes × ${REWARD_PER_NODE} tokens each)`);
+  console.log(`🔗 KOII FRAMEWORK: Distribution list submitted - tokens will be transferred automatically`);
   
   return distributionList;
-}
-
-/**
- * Delayed distribution coordinator
- * Waits 6 minutes after round start to allow audit completion
- * 
- * NOTE: The framework automatically calls the distribution() function
- * with approved submitters. This function serves as a coordinator to ensure
- * all audits have completed before distribution begins.
- */
-export const generateAndSubmitDistributionList = async (data: any) => {
-  const round = data.round;
-
-  // PREVENT DUPLICATE COORDINATION
-  if (processedRounds.has(round)) {
-    console.log(`⚠️ Round ${round} distribution already coordinated, skipping`);
-    return;
-  }
-
-  setTimeout(async () => {
-    console.log(`🕐 Delayed distribution coordinator started for round ${round}`);
-    console.log(`📊 Framework will automatically generate distribution list for round ${round}`);
-    console.log(`🎁 Reward structure: ${REWARD_PER_NODE} tokens per approved node (max ${MAX_BOUNTY_PER_ROUND} per round)`);
-    console.log(`⏳ Warming period: Rounds 1-3 get 0 tokens, rewards start from round 4`);
-    console.log(`✅ Distribution coordination completed for round ${round}`);
-  }, 6 * 60 * 1000); // Slightly after audit
 };
 
-/**
- * Distribution list audit function
- * Called by the Koii framework to audit distribution lists
- * This function validates that the distribution list is correct and fair
- */
+export const generateAndSubmitDistributionList = async (data: any) => {
+  const round = data.round;
+  console.log(`🕐 IMPROVED REWARD DISTRIBUTION COORDINATOR FOR ROUND ${round}`);
+  console.log(`🎯 Core requirement: ${REWARD_PER_NODE} tokens per approved node`);
+  console.log(`🔗 KOII FRAMEWORK: Using built-in reward system for automatic token transfers`);
+  
+  try {
+    // IMPROVED: Use the default Koii pattern for fetching task data
+    let taskAccountDataJSON, taskStakeListJSON;
+    
+    try {
+      taskAccountDataJSON = await namespaceWrapper.getTaskSubmissionInfo(round);
+      taskStakeListJSON = await namespaceWrapper.getTaskState({
+        is_stake_list_required: true,
+      });
+    } catch (error) {
+      console.error("❌ ERROR FETCHING TASK SUBMISSION DATA:", error);
+      return JSON.stringify({});
+    }
+    
+    if (!taskAccountDataJSON || !taskStakeListJSON) {
+      console.error("❌ ERROR IN FETCHING TASK SUBMISSION DATA");
+      return JSON.stringify({});
+    }
+    
+    if (!taskAccountDataJSON.submissions?.[round]) {
+      console.log(`❌ NO SUBMISSIONS FOUND IN ROUND ${round}`);
+      return JSON.stringify({});
+    }
+    
+    const submissions = taskAccountDataJSON.submissions[round];
+    const submissions_audit_trigger = taskAccountDataJSON.submissions_audit_trigger?.[round];
+    const stakeList = taskStakeListJSON.stake_list;
+    
+    if (!submissions) {
+      console.log(`❌ No submissions data for round ${round}`);
+      return JSON.stringify({});
+    }
+    
+    // IMPROVED: Convert submissions to submitters format using default Koii pattern
+    const submitters: Submitter[] = [];
+    const keys = Object.keys(submissions);
+    
+    keys.forEach((candidatePublicKey) => {
+      const votes = submissions_audit_trigger?.[candidatePublicKey]?.votes;
+      // initial vote was true, no audit triggered
+      let validVotes = 1;
+      if (votes) {
+        // tally votes from audit
+        validVotes = votes.reduce((acc: number, vote: any) => acc + (vote.is_valid ? 1 : -1), 0);
+      }
+      
+      submitters.push({
+        publicKey: candidatePublicKey,
+        votes: validVotes,
+        stake: stakeList[candidatePublicKey] || 0,
+      });
+    });
+    
+    console.log(`👥 Found ${submitters.length} submitters for distribution`);
+    
+    if (submitters.length === 0) {
+      console.log(`❌ No valid submitters found for round ${round} - no distribution needed`);
+      return JSON.stringify({});
+    }
+    
+    // Get the bounty amount from config (4000 tokens per round)
+    const bounty = taskStakeListJSON.bounty_amount_per_round || (4000 * 1_000_000_000);
+    
+    // Call the distribution function to generate the distribution list
+    const distributionList = await distribution(submitters, bounty, round);
+    
+    // IMPROVED: Validate distribution list format (following default Koii pattern)
+    const validatedDistributionList = await userEndDistributionListCheck(submitters, bounty, distributionList);
+    
+    // Store the distribution list for submission
+    await namespaceWrapper.storeSet("distributionList", JSON.stringify(validatedDistributionList));
+    console.log(`✅ Distribution list generated and stored for round ${round}`);
+    
+    // Log the distribution summary
+    const approvedCount = Object.values(validatedDistributionList).filter(amount => amount > 0).length;
+    const totalTokens = Object.values(validatedDistributionList).reduce((sum, amount) => sum + amount, 0) / 1_000_000_000;
+    console.log(`💰 DISTRIBUTION SUMMARY: ${approvedCount} nodes approved, ${totalTokens} total tokens`);
+    console.log(`🔗 KOII FRAMEWORK: Distribution list will trigger automatic token transfers to node wallets`);
+    
+    // Submit the distribution list to the network
+    // The Koii framework will handle the actual token transfers when this is processed
+    const submissionValue = JSON.stringify(validatedDistributionList);
+    console.log(`📤 SUBMITTING DISTRIBUTION LIST TO KOII NETWORK: ${submissionValue}`);
+    console.log(`🎁 TOKENS WILL BE TRANSFERRED AUTOMATICALLY BY KOII FRAMEWORK`);
+    
+    return submissionValue;
+    
+  } catch (error) {
+    console.error("❌ DISTRIBUTION LIST GENERATION ERROR:", error);
+    
+    // Store empty distribution list as fallback
+    const emptyDistributionList = {};
+    await namespaceWrapper.storeSet("distributionList", JSON.stringify(emptyDistributionList));
+    console.log('📤 Stored empty distribution list due to error');
+    
+    return JSON.stringify(emptyDistributionList);
+  }
+};
+
+// IMPROVED: Added proper distribution list validation (following default Koii pattern)
+export const userEndDistributionListCheck = async (
+  candidates: Submitter[], 
+  bountyAmountPerRound: number, 
+  user_submitted_distributionList: DistributionList
+): Promise<DistributionList> => {
+  // get candidates public keys
+  const candidatesPublicKeys = candidates.map((candidate) => candidate.publicKey);
+  // get the user submitted distribution list keys
+  const userSubmittedDistributionListKeys = Object.keys(user_submitted_distributionList);
+  
+  // check if all the candidates are in the user submitted distribution list
+  const allCandidatesInUserSubmittedDistributionList = candidatesPublicKeys.every((candidatePublicKey) => 
+    userSubmittedDistributionListKeys.includes(candidatePublicKey)
+  );
+  
+  if (!allCandidatesInUserSubmittedDistributionList) {
+    // return a distribution list with 0 for all candidate
+    console.log("❌ FATAL ERROR PREVENTION MECHANISM TRIGGERED: NOT ALL CANDIDATES IN USER SUBMITTED DISTRIBUTION LIST");
+    return Object.fromEntries(candidatesPublicKeys.map((candidatePublicKey) => [
+      candidatePublicKey,
+      0,
+    ]));
+  }
+  
+  return user_submitted_distributionList;
+};
+
 export const distributionListAudit = async (data: any) => {
   const round = data.round;
-  const isPreviousRoundFailed = data.isPreviousRoundFailed || false;
-  
-  console.log(`🔍 AUDIT DISTRIBUTION CALLED WITHIN ROUND: ${round}`);
-  console.log(`📋 Previous round failed: ${isPreviousRoundFailed}`);
-  
-  // The actual distribution list audit logic is handled by the main distribution() function
-  // This function serves as a hook for the Koii framework to trigger distribution auditing
-  console.log(`✅ Distribution list audit completed for round ${round}`);
-  
-  return true; // Return true to indicate successful audit
+  console.log(`🔍 Improved reward distribution audit for round ${round}`);
+  console.log(`✅ Core requirement audit completed: ${REWARD_PER_NODE} tokens per node`);
+  console.log(`🔗 KOII FRAMEWORK: Distribution audit passed - tokens will be transferred`);
+  return true;
 };

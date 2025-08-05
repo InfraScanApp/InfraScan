@@ -1,6 +1,7 @@
 import { namespaceWrapper, app } from "@_koii/task-manager/namespace-wrapper";
 import { UptimeTracker } from './uptime-tracker';
 import { UptimeUtils } from './uptime-utils';
+import { StaticCacheManager } from './static-cache-manager';
 
 /**
  * 
@@ -12,6 +13,7 @@ import { UptimeUtils } from './uptime-utils';
 export async function routes() {
   const uptimeTracker = UptimeTracker.getInstance();
   const uptimeUtils = UptimeUtils.getInstance();
+  const staticCacheManager = StaticCacheManager.getInstance();
 
   app.get("/value", async (_req, res) => {
     const value = await namespaceWrapper.storeGet("value");
@@ -176,6 +178,111 @@ export async function routes() {
         error: 'Health check failed',
         timestamp: Date.now()
       });
+    }
+  });
+
+  // Static data export endpoint
+  app.get("/static/export", async (_req, res) => {
+    try {
+      const exportData = await staticCacheManager.exportStaticDataForWebDB();
+      res.status(200).json({ 
+        exportData: JSON.parse(exportData),
+        timestamp: Date.now()
+      });
+    } catch (error) {
+      console.error('Error exporting static data:', error);
+      res.status(500).json({ error: 'Failed to export static data' });
+    }
+  });
+
+  // Complete data export for web database
+  app.get("/data/export", async (_req, res) => {
+    try {
+      const uptimeExport = await uptimeUtils.exportUptimeDataForWebDB();
+      const staticExport = await staticCacheManager.exportStaticDataForWebDB();
+      
+      const completeExport = {
+        nodeId: process.env.NODE_ID || 'unknown',
+        exportTimestamp: Date.now(),
+        exportDate: new Date().toISOString(),
+        uptimeData: JSON.parse(uptimeExport),
+        staticData: JSON.parse(staticExport),
+        summary: {
+          totalUptimeRecords: JSON.parse(uptimeExport).totalRecords,
+          hasStaticData: true,
+          isEligibleForRewards: await uptimeUtils.checkMonthlyEligibility()
+        }
+      };
+      
+      res.status(200).json({ 
+        exportData: completeExport,
+        timestamp: Date.now()
+      });
+    } catch (error) {
+      console.error('Error exporting complete data:', error);
+      res.status(500).json({ error: 'Failed to export complete data' });
+    }
+  });
+
+  // Node score calculation endpoint
+  app.get("/score/calculate", async (_req, res) => {
+    try {
+      const stats = await uptimeTracker.calculateUptimeStats();
+      const records = await uptimeTracker.getUptimeRecords();
+      
+      // Calculate cumulative node score
+      const monthlyPercentages = Object.values(stats.monthly).map(m => m.percentage);
+      const averageMonthlyUptime = monthlyPercentages.length > 0 
+        ? monthlyPercentages.reduce((sum, p) => sum + p, 0) / monthlyPercentages.length 
+        : 0;
+      
+      const totalUptimeHours = records.length; // Each record = 1 hour
+      const consecutiveHours = uptimeUtils['calculateConsecutiveHours'](records);
+      const longestUptime = uptimeUtils['calculateLongestUptime'](records);
+      
+      const nodeScore = {
+        averageMonthlyUptime: Math.round(averageMonthlyUptime * 100) / 100,
+        totalUptimeHours,
+        consecutiveHours,
+        longestUptime,
+        totalRecords: records.length,
+        isEligibleFor95Percent: averageMonthlyUptime >= 95,
+        score: Math.round(averageMonthlyUptime * 10) / 10 // Score out of 100
+      };
+      
+      res.status(200).json({ 
+        nodeScore,
+        timestamp: Date.now()
+      });
+    } catch (error) {
+      console.error('Error calculating node score:', error);
+      res.status(500).json({ error: 'Failed to calculate node score' });
+    }
+  });
+
+  // Web database upload endpoint
+  app.post("/upload/webdb", async (req, res) => {
+    try {
+      const { webDBUrl, apiKey } = req.body;
+      
+      if (!webDBUrl) {
+        res.status(400).json({ error: 'webDBUrl is required' });
+        return;
+      }
+      
+      const success = await uptimeUtils.uploadDataToWebDB(webDBUrl, apiKey);
+      
+      if (success) {
+        res.status(200).json({ 
+          message: 'Data uploaded successfully to web database',
+          timestamp: Date.now()
+        });
+      } else {
+        res.status(500).json({ error: 'Failed to upload data to web database' });
+      }
+    } catch (error) {
+      console.error('Error uploading to web database:', error);
+      res.status(500).json({ error: 'Failed to upload to web database' });
     }
   });
 }

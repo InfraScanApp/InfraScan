@@ -256,7 +256,7 @@ export class StaticCacheManager {
   }
 
   /**
-   * Get cache file status
+   * Get cache status information
    */
   public async getCacheStatus(): Promise<{
     exists: boolean;
@@ -266,27 +266,63 @@ export class StaticCacheManager {
   }> {
     try {
       const exists = await this.fileExists(this.cacheFilePath);
-      
-      if (exists) {
-        const stats = await fs.stat(this.cacheFilePath);
-        return {
-          exists: true,
-          size: stats.size,
-          lastModified: stats.mtime,
-          path: this.cacheFilePath
-        };
-      } else {
+      if (!exists) {
         return {
           exists: false,
           path: this.cacheFilePath
         };
       }
+
+      const stats = await fs.stat(this.cacheFilePath);
+      return {
+        exists: true,
+        size: stats.size,
+        lastModified: stats.mtime,
+        path: this.cacheFilePath
+      };
     } catch (error) {
       console.error('Static Cache: Failed to get cache status:', error);
       return {
         exists: false,
         path: this.cacheFilePath
       };
+    }
+  }
+
+  /**
+   * Export static data for web database upload
+   */
+  public async exportStaticDataForWebDB(): Promise<string> {
+    try {
+      const cachedData = await this.loadCachedData();
+      const currentData = await this.hardwareDetection.collectStaticData();
+      
+      const exportData = {
+        nodeId: process.env.NODE_ID || 'unknown',
+        exportTimestamp: Date.now(),
+        exportDate: new Date().toISOString(),
+        staticData: currentData,
+        cachedData: cachedData ? {
+          lastUpdated: cachedData.lastUpdated,
+          hash: cachedData.hash,
+          hasChanged: cachedData.hash !== this.hardwareDetection.generateDataHash(currentData)
+        } : null,
+        summary: {
+          cpuModel: currentData.cpu.model,
+          totalRAM: `${Math.round(currentData.ram.totalMB / 1024)}GB`,
+          totalStorage: `${currentData.storage.totalGB}GB`,
+          gpuPresent: currentData.gpu.present,
+          osPlatform: currentData.os.platform,
+          isVirtual: currentData.os.isVirtual,
+          architecture: currentData.system.arch,
+          hostname: currentData.system.hostname
+        }
+      };
+
+      return JSON.stringify(exportData);
+    } catch (error) {
+      console.error('Static Cache: Failed to export static data:', error);
+      throw error;
     }
   }
 

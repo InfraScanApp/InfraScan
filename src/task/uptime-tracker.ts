@@ -10,6 +10,10 @@ export interface UptimeRecord {
   uptimeDays: number;
   nodeStartTime: number;
   isOnline: boolean;
+  // NEW: Track actual round participation
+  roundParticipation: boolean;
+  cumulativeRounds: number;
+  totalUptimeHours: number;
 }
 
 export interface UptimeStats {
@@ -24,6 +28,8 @@ export class UptimeTracker {
   private readonly UPTIME_RECORDS_KEY = 'uptime_records';
   private readonly NODE_START_TIME_KEY = 'node_start_time';
   private readonly ROUND_DURATION_MS = 3600000; // 1 hour in milliseconds
+  private readonly CUMULATIVE_ROUNDS_KEY = 'cumulative_rounds';
+  private readonly TOTAL_UPTIME_HOURS_KEY = 'total_uptime_hours';
 
   private constructor() {
     this.nodeStartTime = Date.now();
@@ -59,31 +65,41 @@ export class UptimeTracker {
 
   /**
    * Record uptime for the current round
+   * NEW: Tracks actual round participation instead of continuous uptime
    */
   public async recordUptime(roundNumber: number): Promise<UptimeRecord> {
     const now = Date.now();
-    const uptimeMs = now - this.nodeStartTime;
-    const uptimeSeconds = Math.floor(uptimeMs / 1000);
-    const uptimeMinutes = Math.floor(uptimeSeconds / 60);
-    const uptimeHours = Math.floor(uptimeMinutes / 60);
-    const uptimeDays = Math.floor(uptimeHours / 24);
-
+    
+    // Get cumulative stats
+    const cumulativeRounds = await this.getCumulativeRounds();
+    const totalUptimeHours = await this.getTotalUptimeHours();
+    
+    // Calculate actual uptime based on round participation (1 hour per round)
+    const actualUptimeHours = cumulativeRounds + 1; // +1 for current round
+    const actualUptimeSeconds = actualUptimeHours * 3600; // Convert to seconds
+    
     const record: UptimeRecord = {
       timestamp: now,
       date: new Date(now).toISOString().split('T')[0], // YYYY-MM-DD format
       roundNumber,
-      uptimeSeconds,
-      uptimeMinutes,
-      uptimeHours,
-      uptimeDays,
+      uptimeSeconds: actualUptimeSeconds,
+      uptimeMinutes: Math.floor(actualUptimeSeconds / 60),
+      uptimeHours: actualUptimeHours,
+      uptimeDays: Math.floor(actualUptimeHours / 24),
       nodeStartTime: this.nodeStartTime,
-      isOnline: true
+      isOnline: true,
+      roundParticipation: true,
+      cumulativeRounds: actualUptimeHours,
+      totalUptimeHours: actualUptimeHours
     };
 
     try {
+      // Update cumulative stats
+      await this.updateCumulativeStats(actualUptimeHours);
+      
       // Store the record
       await this.storeUptimeRecord(record);
-      console.log(`Uptime Tracker: Recorded uptime for round ${roundNumber}: ${this.formatUptime(uptimeSeconds)}`);
+      console.log(`Uptime Tracker: Recorded round ${roundNumber} participation. Total uptime: ${actualUptimeHours} hours`);
       return record;
     } catch (error) {
       console.error('Uptime Tracker: Failed to record uptime:', error);
@@ -99,11 +115,12 @@ export class UptimeTracker {
       const existingRecords = await this.getUptimeRecords();
       existingRecords.push(record);
       
-      // Keep only last 30 days of records to prevent excessive storage
-      const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
-      const filteredRecords = existingRecords.filter(r => r.timestamp > thirtyDaysAgo);
+      // REMOVED: 30-day retention limit to allow cumulative tracking
+      // Keep all historical records for cumulative uptime analysis
+      // const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+      // const filteredRecords = existingRecords.filter(r => r.timestamp > thirtyDaysAgo);
       
-      await namespaceWrapper.storeSet(this.UPTIME_RECORDS_KEY, JSON.stringify(filteredRecords));
+      await namespaceWrapper.storeSet(this.UPTIME_RECORDS_KEY, JSON.stringify(existingRecords));
     } catch (error) {
       console.error('Uptime Tracker: Failed to store uptime record:', error);
       throw error;
@@ -183,9 +200,16 @@ export class UptimeTracker {
 
   /**
    * Get current uptime in seconds
+   * NEW: Based on actual round participation, not continuous time
    */
-  public getCurrentUptimeSeconds(): number {
-    return Math.floor((Date.now() - this.nodeStartTime) / 1000);
+  public async getCurrentUptimeSeconds(): Promise<number> {
+    try {
+      const totalUptimeHours = await this.getTotalUptimeHours();
+      return totalUptimeHours * 3600; // Convert hours to seconds
+    } catch (error) {
+      console.error('Uptime Tracker: Failed to get current uptime seconds:', error);
+      return 0;
+    }
   }
 
   /**
@@ -201,7 +225,7 @@ export class UptimeTracker {
    * Get uptime data for submission (max 512 bytes)
    */
   public async getUptimeSubmissionData(): Promise<string> {
-    const currentUptime = this.getCurrentUptimeSeconds();
+    const currentUptime = await this.getCurrentUptimeSeconds();
     const stats = await this.calculateUptimeStats();
     
     // Get current month's uptime percentage
@@ -265,5 +289,43 @@ export class UptimeTracker {
     const [year, month] = monthKey.split('-').map(Number);
     const daysInMonth = new Date(year, month, 0).getDate();
     return daysInMonth * 24; // 24 hours per day
+  }
+
+  /**
+   * Get cumulative rounds participated in
+   */
+  private async getCumulativeRounds(): Promise<number> {
+    try {
+      const roundsStr = await namespaceWrapper.storeGet(this.CUMULATIVE_ROUNDS_KEY);
+      return roundsStr ? parseInt(roundsStr) : 0;
+    } catch (error) {
+      console.error('Uptime Tracker: Failed to get cumulative rounds:', error);
+      return 0;
+    }
+  }
+
+  /**
+   * Get total uptime hours
+   */
+  private async getTotalUptimeHours(): Promise<number> {
+    try {
+      const hoursStr = await namespaceWrapper.storeGet(this.TOTAL_UPTIME_HOURS_KEY);
+      return hoursStr ? parseInt(hoursStr) : 0;
+    } catch (error) {
+      console.error('Uptime Tracker: Failed to get total uptime hours:', error);
+      return 0;
+    }
+  }
+
+  /**
+   * Update cumulative statistics
+   */
+  private async updateCumulativeStats(totalHours: number): Promise<void> {
+    try {
+      await namespaceWrapper.storeSet(this.CUMULATIVE_ROUNDS_KEY, totalHours.toString());
+      await namespaceWrapper.storeSet(this.TOTAL_UPTIME_HOURS_KEY, totalHours.toString());
+    } catch (error) {
+      console.error('Uptime Tracker: Failed to update cumulative stats:', error);
+    }
   }
 } 
