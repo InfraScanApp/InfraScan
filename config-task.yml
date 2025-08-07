@@ -67,7 +67,7 @@ environment: "PRODUCTION"
 
 #################################### BELOW IS FOR UPDATE TASK ONLY ####################################
 # Old Task ID: (ONLY for task update) 
-task_id: '4TuxkV4UKVH7sDejeMq3Yu3es1TfCBtBwecNEKQjqS1Q'
+task_id: '8Pps7WLrtiUjhhjNai8baWo33NNL7S3kSJLTqxjsH7UT'
 
 # Migration Description: (ONLY for task update)
 migrationDescription: 'FLEXIBLE BOUNTY: Updated to 1M initial bounty with 4000 tokens per round limit. Total bounty will be monitored and topped up as needed for community growth.'
